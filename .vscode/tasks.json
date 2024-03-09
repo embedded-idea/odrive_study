@@ -1,0 +1,42 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build",
+            "type": "shell",
+            "command": "make",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "dependsOn":"Build",          //task labal name, here is Build
+            "label": "Build and Download",
+            "type": "shell",
+            "command": "openocd", 
+            "args": [
+            "-s",
+            "/usr/share/openocd/scripts",
+            "-f",
+            "interface/stlink.cfg",
+            "-f",
+            "target/stm32f4x.cfg",
+            "-c",
+            "init",
+            "-c",
+            "reset halt",
+            "-c",
+            "flash write_image erase build/odrive_min.elf",
+            "-c",
+            "reset run",
+            "-c",
+            "exit"
+            ],
+            "problemMatcher": []
+        }
+    ]
+}
