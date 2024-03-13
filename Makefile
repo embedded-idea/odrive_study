@@ -152,6 +152,14 @@ ASMM_SOURCES =
 # binaries
 #######################################
 PREFIX = arm-none-eabi-
+
+#try to get a correct python command to run all python scripts for me is python3 -B
+ifeq ($(shell python -c "import sys; print(sys.version_info.major)"), 3)
+	PY_CMD := python -B
+else
+	PY_CMD := python3 -B
+endif
+
 # The gcc compiler bin path can be either defined in make command via GCC_PATH variable (> make GCC_PATH=xxx)
 # either it can be added to the PATH environment variable.
 ifdef GCC_PATH
@@ -281,8 +289,16 @@ LDFLAGS += -mthumb -mfloat-abi=hard -u _printf_float -u _scanf_float -Wl,--cref 
 LDFLAGS += -Wl,--undefined=uxTopUsedPriority
 
 # default action: build all
-all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin TESTBIN_HEX_ASM
+all: AUTOHEADERS $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin TESTBIN_HEX_ASM
 
+AUTOHEADERS:
+	@echo $(PY_CMD)
+	@mkdir -p autogen
+	@$(PY_CMD) tools/odrive/version.py --output autogen/version.c
+	@$(PY_CMD) interface_generator_stub.py --definitions odrive-interface.yaml --template fibre-cpp/interfaces_template.j2 --output autogen/interfaces.hpp
+	@$(PY_CMD) interface_generator_stub.py --definitions odrive-interface.yaml --template fibre-cpp/function_stubs_template.j2 --output autogen/function_stubs.hpp
+	@$(PY_CMD) interface_generator_stub.py --definitions odrive-interface.yaml --generate-endpoints 'ODrive3' --template fibre-cpp/endpoints_template.j2 --output autogen/endpoints.hpp
+	@$(PY_CMD) interface_generator_stub.py --definitions odrive-interface.yaml --template fibre-cpp/type_info_template.j2 --output autogen/type_info.hpp
 
 #######################################
 # build the application
@@ -307,7 +323,7 @@ $(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR)
 
 $(BUILD_DIR)/__%.o: %.cpp Makefile | $(BUILD_DIR) 
 	@echo "c++++++++++++++++++++++++++++"
-	$(CXX) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
+	$(CXX) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.cpp=.lst)) $< -o $@
 
 
 $(BUILD_DIR)/%.o: %.s Makefile | $(BUILD_DIR)
@@ -342,7 +358,7 @@ TESTBIN_HEX_ASM: $(BUILD_DIR)/$(TARGET).elf
 # clean up
 #######################################
 clean:
-	-rm -fR $(BUILD_DIR)
+	-rm -fR $(BUILD_DIR) autogen
   
 #######################################
 # dependencies
