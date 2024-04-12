@@ -130,6 +130,14 @@ start_general_purpose_adc(); todo
 init_communication(); 
     start_uart_server create thread respond data
     start_usb_server create thread respond data
+    {
+        USBD_CDC_ReceivePacket will prepare the buf to usb stack
+        to be ready to receive.
+
+        Board/v3/Src/usbd_cdc_if.c:->CDC_Receive_FS->usb_rx_process_packet
+        ->send usb message to usb_server_thread with 5/6 CDC_OUT_EP/ODRIVE_OUT_EP
+
+    }
 
 
     todo
