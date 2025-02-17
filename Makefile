@@ -130,13 +130,16 @@ fibre-cpp/fibre.cpp \
 fibre-cpp/channel_discoverer.cpp \
 fibre-cpp/legacy_protocol.cpp
 
+C_SOURCES_DISPLAY = \
+Display/oled.cpp
 
 C_SOURCES = $(C_SOURCES_HAL_DRIVER) \
 $(C_SOURCES_BOARD) \
 $(C_SOURCES_RTOS) \
 $(C_SOURCES_USB) \
 $(C_SOURCES_FIRMWARE) \
-$(C_SOURCES_FIBRE)
+$(C_SOURCES_FIBRE) \
+$(C_SOURCES_DISPLAY)
 
 
 
@@ -235,6 +238,8 @@ C_INCLUDES_FIREWARE = \
 C_INCLUDES_FIBRE = \
 -Ifibre-cpp/include
 
+C_INCLUDES_DISPLAY = \
+-IDisplay/
 
 C_INCLUDES = -I./ $(C_INCLUDES_CMSIS) \
 $(C_INCLUDES_HAL_Driver) \
@@ -242,7 +247,8 @@ $(C_INCLUDES_BOARD) \
 $(C_INCLUDES_RTOS) \
 $(C_INCLUDES_USB) \
 $(C_INCLUDES_FIREWARE) \
-$(C_INCLUDES_FIBRE)
+$(C_INCLUDES_FIBRE) \
+$(C_INCLUDES_DISPLAY)
 
 
 

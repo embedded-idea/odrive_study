@@ -10,7 +10,7 @@
 #include <communication/interface_uart.h>
 #include <communication/interface_i2c.h>
 #include <communication/interface_can.hpp>
-
+#include "Display/oled.hpp"
 osSemaphoreId sem_usb_irq;
 osMessageQId uart_event_queue;
 osMessageQId usb_event_queue;
@@ -582,6 +582,9 @@ static void rtos_main(void*) {
     for (size_t i = 0; i < AXIS_COUNT; ++i) {
         axes[i].start_thread();
     }
+
+    //OLED display thread
+    start_display_OLED_thread();
 
     odrv.system_stats_.fully_booted = true;
 

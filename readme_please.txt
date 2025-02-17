@@ -10,11 +10,11 @@ erase-stlink:
 openocd -s /usr/share/openocd/scripts -f interface/stlink.cfg -f target/stm32f4x.cfg -c init -c 'reset halt' -c 'flash erase_sector 0 0 last' -c exit
 
 flash-stlink:
-openocd -s /usr/share/openocd/scripts -f interface/stlink.cfg -f target/stm32f4x.cfg -c init  -c 'reset halt' -c 'flash write_image erase $(FIRMWARE)' -c 'reset run' -c exit
+openocd -s /usr/share/openocd/scripts -f interface/stlink.cfg -f target/stm32f4x.cfg -c init  -c 'reset halt' -c 'flash write_image erase build/odrive_min.elf' -c 'reset run' -c exit
 
 
 gdb:
-arm-none-eabi-gdb --ex 'target extended-remote | openocd -s /usr/share/openocd/scripts -f "interface/stlink.cfg" -f "target/stm32f4x.cfg" -c "gdb_port pipe; log_output openocd.log"' --ex 'monitor reset halt' *.ELF
+arm-none-eabi-gdb --ex 'target extended-remote | openocd -s /usrbuild/odrive_min.elf/share/openocd/scripts -f "interface/stlink.cfg" -f "target/stm32f4x.cfg" -c "gdb_port pipe; log_output openocd.log"' --ex 'monitor reset halt' *.ELF
 
 
 interface_generator_stub.py --definitions odrive-interface.yaml --template fibre-cpp/interfaces_template.j2 --output autogen/interfaces.hpp
@@ -289,3 +289,56 @@ axis.encoder_.sample_now();->
 
 
 
+setting 
+odrv0.erase_configuration()
+odrv0.vbus_voltage
+odrv0.config.dc_bus_undervoltage_trip_level = 2
+odrv0.axis0.motor.config.pole_pairs = 7
+odrv0.axis0.motor.config.motor_type = MOTOR_TYPE_HIGH_CURRENT
+odrv0.axis0.encoder.config.mode = ENCODER_MODE_INCREMENTAL
+odrv0.axis0.encoder.config.use_index = True
+odrv0.axis0.encoder.config.cpr = 4000
+odrv0.axis0.controller.config.pos_gain = 1
+odrv0.axis0.controller.config.vel_gain = 0.05
+odrv0.axis0.controller.config.vel_integrator_gain = 0.5
+odrv0.axis0.controller.config.enable_overspeed_error = False
+
+odrv0.axis0.requested_state = AXIS_STATE_MOTOR_CALIBRATION //长响一声
+dump_errors(odrv0)
+odrv0.axis0.motor.config.pre_calibrated = True
+odrv0.axis0.requested_state = AXIS_STATE_ENCODER_INDEX_SEARCH //反转一圈，轻轻响一下
+dump_errors(odrv0)
+odrv0.axis0.requested_state = AXIS_STATE_ENCODER_OFFSET_CALIBRATION //反转，正转一圈
+dump_errors(odrv0)
+odrv0.axis0.encoder.config.pre_calibrated = True
+
+odrv0.axis0.config.startup_encoder_index_search = True
+odrv0.axis0.config.startup_closed_loop_control = True
+odrv0.save_configuration()
+
+odrv0.axis0.controller.input_pos = 5
+
+odrv0.clear_errors()
+
+
+
+
+    {nullptr, 0}, // dummy GPIO0 so that PCB labels and software numbers match
+
+    {GPIOA, GPIO_PIN_0}, // GPIO1       mode is ODriveIntf::GPIO_MODE_UART_A
+    {GPIOA, GPIO_PIN_1}, // GPIO2       mode is ODriveIntf::GPIO_MODE_UART_A
+    {GPIOA, GPIO_PIN_2}, // GPIO3       mode is ODriveIntf::GPIO_MODE_ANALOG_IN
+    {GPIOA, GPIO_PIN_3}, // GPIO4       mode is ODriveIntf::GPIO_MODE_ANALOG_IN
+    {GPIOC, GPIO_PIN_4}, // GPIO5       mode is ODriveIntf::GPIO_MODE_ANALOG_IN
+    {GPIOB, GPIO_PIN_2}, // GPIO6       mode is ODriveIntf::GPIO_MODE_DIGITAL
+    {GPIOA, GPIO_PIN_15}, // GPIO7      mode is ODriveIntf::GPIO_MODE_DIGITAL
+    {GPIOB, GPIO_PIN_3}, // GPIO8       mode is ODriveIntf::GPIO_MODE_DIGITAL
+    
+    {GPIOB, GPIO_PIN_4}, // ENC0_A      mode is ODriveIntf::GPIO_MODE_ENC0
+    {GPIOB, GPIO_PIN_5}, // ENC0_B      mode is ODriveIntf::GPIO_MODE_ENC0
+    {GPIOC, GPIO_PIN_9}, // ENC0_Z      mode is ODriveIntf::GPIO_MODE_DIGITAL_PULL_DOWN
+    {GPIOB, GPIO_PIN_6}, // ENC1_A      mode is ODriveIntf::GPIO_MODE_ENC1
+    {GPIOB, GPIO_PIN_7}, // ENC1_B      mode is ODriveIntf::GPIO_MODE_ENC1
+    {GPIOC, GPIO_PIN_15}, // ENC1_Z     mode is ODriveIntf::GPIO_MODE_DIGITAL_PULL_DOWN
+    {GPIOB, GPIO_PIN_8}, // CAN_R       mode is ODriveIntf::GPIO_MODE_CAN_A
+    {GPIOB, GPIO_PIN_9}, // CAN_D       mode is ODriveIntf::GPIO_MODE_CAN_A
