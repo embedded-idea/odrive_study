@@ -14,9 +14,9 @@ ODrive 电机控制实战
 little car final project here 最后的小项目视频
 [观看演示视频](3dprintmodel_demo_fromOdrivebook/videos/IMG_4448.mov)
 
+[click here to buy the book 点击购买《ODrive 电机控制实战》](https://mall.bilibili.com/neul-next/detailuniversal/detail.html?isMerchant=1&page=detailuniversal_detail&saleType=0&itemsId=40330749&loadingShow=1&noTitleBar=1&track_id=__BGMT__&from=&from_spmid=__SPMID__&msource=cps_comments_3546707220498944_cont-1-116022233268364)
 
 
-[click here to buy the book 点击购买《ODrive 电机控制实战》]([https://你的购买链接.com](https://mall.bilibili.com/neul-next/detailuniversal/detail.html?isMerchant=1&page=detailuniversal_detail&saleType=0&itemsId=40330749&loadingShow=1&noTitleBar=1&track_id=__BGMT__&from=&from_spmid=__SPMID__&msource=cps_comments_3546707220498944_cont-1-116022233268364))
 
 The book has been officially published in China by Publishing House of Electronics Industry.
 
