@@ -12,7 +12,7 @@ ODrive 电机控制实战
 ![ODrive 电机控制实战封面](3dprintmodel_demo_fromOdrivebook/pictures/IMG_4449.JPG)
 
 little car final project here 最后的小项目视频
-[观看演示视频](3dprintmodel_demo_fromOdrivebook/videos/IMG_4448.mp4)
+[观看演示视频](3dprintmodel_demo_fromOdrivebook/videos/IMG_4448.mov)
 
 
 
