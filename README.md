@@ -17,6 +17,10 @@ little car final project here 最后的小项目视频
 [click here to buy the book 点击购买《ODrive 电机控制实战》](https://mall.bilibili.com/neul-next/detailuniversal/detail.html?isMerchant=1&page=detailuniversal_detail&saleType=0&itemsId=40330749&loadingShow=1&noTitleBar=1&track_id=__BGMT__&from=&from_spmid=__SPMID__&msource=cps_comments_3546707220498944_cont-1-116022233268364)
 
 
+[教学视频 teaching videos](https://www.bilibili.com/video/BV1M9QtYwEVo?spm_id_from=333.788.videopod.sections&vd_source=f3cac93aa19596ae6543cfeb95b829d7)
+
+
+[书籍介绍视频 book videos](https://www.bilibili.com/video/BV1UKFkzEE4T/?spm_id_from=333.1387.0.0&vd_source=f3cac93aa19596ae6543cfeb95b829d7)
 
 The book has been officially published in China by Publishing House of Electronics Industry.
 
