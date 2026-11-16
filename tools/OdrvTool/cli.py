@@ -214,6 +214,49 @@ def cmd_clear(args):
     return 0
 
 
+def cmd_currents(args):
+    dev = _connect()
+    if dev is None:
+        return 1
+    n = max(1, min(args.samples, 5000))
+    ts, a, b, c = [], [], [], []
+    t0 = time.perf_counter()
+    try:
+        for _ in range(n):
+            ts.append((time.perf_counter() - t0) * 1000.0)
+            bi = dev.rd("axis0.motor.current_meas_phB")
+            ci = dev.rd("axis0.motor.current_meas_phC")
+            b.append(bi)
+            c.append(ci)
+            a.append(-(bi + ci))
+    except Exception as e:
+        print(bad("采样失败: %s" % e))
+        return 1
+
+    def stats(x):
+        mean = sum(x) / len(x)
+        rms = (sum(v * v for v in x) / len(x)) ** 0.5
+        return mean, rms, min(x), max(x)
+
+    dur = ts[-1] if ts else 0.0
+    rate = (len(ts) / dur * 1000.0) if dur > 0 else 0.0
+    print("采样 %d 点 / %.0f ms / %.0f Hz" % (len(ts), dur, rate))
+    print("%-4s %10s %10s %10s %10s" % ("相", "mean(A)", "RMS(A)", "min(A)", "max(A)"))
+    for name, x in (("Ia", a), ("Ib", b), ("Ic", c)):
+        mean, rms, lo, hi = stats(x)
+        print("%-4s %10.4f %10.4f %10.4f %10.4f" % (name, mean, rms, lo, hi))
+    worst = max(abs(ai + bi + ci) for ai, bi, ci in zip(a, b, c))
+    print(dim("max |Ia+Ib+Ic| = %.5f A（A 由 B/C 计算；USB 读取非严格同步）" % worst))
+
+    if args.csv:
+        with open(args.csv, "w") as f:
+            f.write("t_ms,Ia,Ib,Ic\n")
+            for t, ai, bi, ci in zip(ts, a, b, c):
+                f.write("%.3f,%.6f,%.6f,%.6f\n" % (t, ai, bi, ci))
+        print(ok("CSV 已写入 " + args.csv))
+    return 0
+
+
 def cmd_gui(args):
     if not os.path.isfile(GUI_PATH):
         print(bad("找不到 " + GUI_PATH))
@@ -244,6 +287,7 @@ def build_parser():
   odrvtool cal motor
   odrvtool cal encoder --yes
   odrvtool save
+  odrvtool currents -n 500 --csv currents.csv
   odrvtool monitor -i 0.5 -n 20
   odrvtool gui --port 8765
 """)
@@ -282,6 +326,11 @@ def build_parser():
 
     sub.add_parser("save", help="保存配置并重启").set_defaults(func=cmd_save)
     sub.add_parser("clear", help="清除错误").set_defaults(func=cmd_clear)
+
+    sp = sub.add_parser("currents", help="采样三相电流并统计")
+    sp.add_argument("-n", "--samples", type=int, default=400)
+    sp.add_argument("--csv", help="写入 CSV 文件")
+    sp.set_defaults(func=cmd_currents)
 
     sp = sub.add_parser("gui", help="启动本地 Web GUI")
     sp.add_argument("--port", type=int, default=8765)

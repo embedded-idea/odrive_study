@@ -467,12 +467,15 @@ hostname -I          # 例如 172.26.142.47
 | 区域 | 作用 |
 |---|---|
 | 状态卡片 | 母线电压/电流、状态机、速度、位置、Iq、错误 |
+| 急停 | 右上角红色按钮；快捷键 `Space` / `Esc` |
 | 启动/停止 | 进闭环 / 回 IDLE |
-| 速度 | 输入 turn/s，点“应用”；或“平滑加速”（VEL_RAMP） |
-| 位置 | 绝对移动 / 相对移动 |
-| 标定 | 电机标定、编码器偏置标定（有二次确认） |
-| 保存配置 | 保存并重启（重启后点“重连”） |
-| 曲线 | `vel_estimate` 与 `vel_setpoint` 实时对比 |
+| 速度 | 滑块 + 数字框 + 快捷档位（-2…+2）；“平滑”走 VEL_RAMP |
+| 位置 | 绝对移动 / 相对移动 / 点动（±0.1、±1） |
+| 调试参数 | `vel_gain`、`vel_integrator_gain`、`pos_gain`、`vel_limit`、`vel_ramp_rate`、`current_lim`、`torque_constant`、`enc_bandwidth` 在线读写 |
+| 三路曲线 | 速度（目标 vs 实测）、位置、Iq |
+| 三相电流 | `Ia/Ib/Ic` 实时值 + 波形采集（约 700 Hz USB 采样），支持自动采集 |
+| 错误详情 | 错误码翻译成具体名字（如 `ABS_SPI_COM_FAIL`） |
+| 其他 | 电机/编码器标定、保存并重启、导出 CSV、重连、清错误 |
 
 注意事项：
 
@@ -512,6 +515,7 @@ cd ~/workspace/odrive_study
 ./tools/odrvtool save            # 保存并重启
 ./tools/odrvtool clear           # 清错误
 ./tools/odrvtool monitor -i 0.5  # 连续监视
+./tools/odrvtool currents -n 500 # 采样三相电流
 ./tools/odrvtool stop            # 停止
 ./tools/odrvtool gui --port 8765 # 启动 Web GUI
 ```

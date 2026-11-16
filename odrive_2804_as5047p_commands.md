@@ -403,6 +403,9 @@ dev0.vbus_voltage
 dev0.ibus
 dev0.axis0.motor.current_control.Iq_measured
 dev0.axis0.motor.current_control.Id_measured
+dev0.axis0.motor.current_meas_phA          # 三相电流 [A]
+dev0.axis0.motor.current_meas_phB
+dev0.axis0.motor.current_meas_phC
 dev0.axis0.motor.current_control.Vq_setpoint
 dev0.axis0.motor.current_control.Vd_setpoint
 dev0.axis0.motor.current_control.phase_vel      # 电角速度 [rad/s]
@@ -562,6 +565,11 @@ dev0.save_configuration()
 > 注意：`M0_nCS(PC13)` / `M1_nCS(PC14)` 是 **DRV8301 栅极驱动的片选**，
 > 不是编码器 CS。编码器 CS 用 GPIO1~GPIO8 中任意一个（本机用 GPIO1=PA0）。
 > 本仓库 `Odrive.md` 里“M0_nCS 是绝对值编码器片选”的说法不准确。
+>
+> 三相电流：v3.6 只测 **B/C 两相**（ADC2/ADC3），A 相由固件按
+> `Ia = -(Ib + Ic)` 计算（`Board/v3/board.cpp` 的 `fetch_and_reset_adcs`），
+> 所以 `Ia+Ib+Ic` 恒为 0，不能用来查漏电。需要严格三相同步波形时，
+> 用外部电流探头/示波器，或修改固件里的 `Oscilloscope`（当前是 `nullptr`，未启用）。
 
 ---
 

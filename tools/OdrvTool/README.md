@@ -32,6 +32,7 @@ PYTHONPATH=tools ~/.odrive-venv/bin/python -m OdrvTool status
 | `cal motor` / `cal encoder --yes` | 标定 |
 | `save` | 保存并重启 |
 | `clear` | 清错误 |
+| `currents [-n N] [--csv F]` | 采样三相电流并统计 / 导出 CSV |
 | `gui [--port N]` | 启动 `tools/odrv_gui.py` |
 
 ## 说明
