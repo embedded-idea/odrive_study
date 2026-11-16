@@ -417,7 +417,67 @@ dev0.axis0.requested_state = AXIS_STATE_ENCODER_OFFSET_CALIBRATION
 
 ---
 
-## 9. 速查表
+## 9. 图形界面（GUI）
+
+### 9.1 官方 Web GUI
+
+<https://gui.odriverobotics.com> —— **只支持 0.6.x 固件**，
+本机是 0.5.6（`fw-v0.5.6min`），连不上，不要用。
+
+### 9.2 社区 v0.5.6 Web GUI（第三方）
+
+<https://github.com/MoonLighTingPY/odrive3.6_web_gui/releases>
+
+- 专门给 v0.5.6 做的离线 Web GUI，Windows 下是 exe，双击运行后自动开浏览器
+- 功能：配置向导、实时曲线、参数树、标定、预设管理、命令控制台
+- 第三方项目，先在空载、低电压下试；它同样独占 USB，建议不要和本仓库脚本同时开
+
+### 9.3 本仓库自带 `odrv_gui.py`（推荐先试这个）
+
+零依赖（只用 `odrive` 包 + Python 标准库），专门配这套 2804 + AS5047P。
+
+启动：
+
+```bash
+cd ~/workspace/odrive_study
+~/.odrive-venv/bin/python odrv_gui.py
+```
+
+浏览器打开：
+
+```
+http://localhost:8765
+```
+
+如果 Windows 浏览器打不开 `localhost`，用 WSL 的 IP：
+
+```bash
+hostname -I          # 例如 172.26.142.47
+# 浏览器访问 http://172.26.142.47:8765
+```
+
+页面功能：
+
+| 区域 | 作用 |
+|---|---|
+| 状态卡片 | 母线电压/电流、状态机、速度、位置、Iq、错误 |
+| 启动/停止 | 进闭环 / 回 IDLE |
+| 速度 | 输入 turn/s，点“应用”；或“平滑加速”（VEL_RAMP） |
+| 位置 | 绝对移动 / 相对移动 |
+| 标定 | 电机标定、编码器偏置标定（有二次确认） |
+| 保存配置 | 保存并重启（重启后点“重连”） |
+| 曲线 | `vel_estimate` 与 `vel_setpoint` 实时对比 |
+
+注意事项：
+
+- 运行期间 **独占 ODrive**，先关掉 `odrivetool` 和其它脚本。
+- 关掉 GUI（Ctrl-C 或 `pkill -f odrv_gui.py`）**不会停机**，
+  先在页面点“停止”，或事后用 `odrivetool` 发 `AXIS_STATE_IDLE`。
+- 端口冲突时换端口：`--port 8766`。
+
+---
+
+## 10. 速查表
 
 ```python
 # 状态
