@@ -432,7 +432,7 @@ dev0.axis0.requested_state = AXIS_STATE_ENCODER_OFFSET_CALIBRATION
 - 功能：配置向导、实时曲线、参数树、标定、预设管理、命令控制台
 - 第三方项目，先在空载、低电压下试；它同样独占 USB，建议不要和本仓库脚本同时开
 
-### 9.3 本仓库自带 `odrv_gui.py`（推荐先试这个）
+### 9.3 本仓库自带 `tools/odrv_gui.py`（推荐先试这个）
 
 零依赖（只用 `odrive` 包 + Python 标准库），专门配这套 2804 + AS5047P。
 
@@ -440,7 +440,13 @@ dev0.axis0.requested_state = AXIS_STATE_ENCODER_OFFSET_CALIBRATION
 
 ```bash
 cd ~/workspace/odrive_study
-~/.odrive-venv/bin/python odrv_gui.py
+~/.odrive-venv/bin/python tools/odrv_gui.py
+```
+
+或者用 OdrvTool：
+
+```bash
+./tools/odrvtool gui
 ```
 
 浏览器打开：
@@ -474,6 +480,61 @@ hostname -I          # 例如 172.26.142.47
 - 关掉 GUI（Ctrl-C 或 `pkill -f odrv_gui.py`）**不会停机**，
   先在页面点“停止”，或事后用 `odrivetool` 发 `AXIS_STATE_IDLE`。
 - 端口冲突时换端口：`--port 8766`。
+
+### 9.4 命令行工具 `OdrvTool`
+
+位置：
+
+```
+tools/
+├── odrv_gui.py          # Web GUI
+├── odrvtool             # 启动器（可执行）
+└── OdrvTool/            # Python 包
+    ├── __init__.py
+    ├── __main__.py
+    ├── cli.py
+    └── device.py
+```
+
+用法：
+
+```bash
+cd ~/workspace/odrive_study
+
+./tools/odrvtool status          # 状态
+./tools/odrvtool start           # 进闭环（0 turn/s）
+./tools/odrvtool vel 0.2         # 速度
+./tools/odrvtool vel 2.0 --ramp 1.0   # 平滑加速
+./tools/odrvtool pos 1.0         # 绝对位置
+./tools/odrvtool rel 0.5         # 相对位置
+./tools/odrvtool cal motor       # 电机标定
+./tools/odrvtool cal encoder --yes    # 编码器偏置标定
+./tools/odrvtool save            # 保存并重启
+./tools/odrvtool clear           # 清错误
+./tools/odrvtool monitor -i 0.5  # 连续监视
+./tools/odrvtool stop            # 停止
+./tools/odrvtool gui --port 8765 # 启动 Web GUI
+```
+
+也可以不用启动器：
+
+```bash
+PYTHONPATH=tools ~/.odrive-venv/bin/python -m OdrvTool status
+```
+
+`status` 输出示例：
+
+```
+Device:   v0.5.6   vbus 12.04 V   ibus 0.00 A
+State:    CLOSED_LOOP_CONTROL (8)   [encoder]   pre_cal=True
+Velocity: +0.200 turn/s   (set +0.200)   Iq +0.054 A
+Position: 195.050 turn
+Errors:   OK
+```
+
+`status --json` 可给脚本用。
+
+> 同样独占 USB：`odrvtool` 和 Web GUI、`odrivetool` 不能同时连。
 
 ---
 

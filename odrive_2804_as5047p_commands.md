@@ -3,8 +3,9 @@
 > 命令怎么用（连接、读/写、标定、运行、排查）见配套文档：
 > **`odrive_commands_usage_guide.md`**
 >
-> 不想敲命令：运行 `~/.odrive-venv/bin/python odrv_gui.py`，
-> 浏览器打开 <http://localhost:8765>（详见使用指南第 9 节）。
+> 不想敲命令：运行 `~/.odrive-venv/bin/python tools/odrv_gui.py`，
+> 浏览器打开 <http://localhost:8765>；或用命令行 `./tools/odrvtool status`
+> （详见使用指南第 9 节）。
 
 > 适用环境（本仓库实测）
 >

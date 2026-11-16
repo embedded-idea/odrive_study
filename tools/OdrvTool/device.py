@@ -1,0 +1,140 @@
+"""OdrvTool - ODrive 设备访问层"""
+
+import odrive
+
+AXIS_STATE = {
+    0: "UNDEFINED", 1: "IDLE", 2: "STARTUP_SEQUENCE",
+    3: "FULL_CALIBRATION_SEQUENCE", 4: "MOTOR_CALIBRATION",
+    6: "ENCODER_INDEX_SEARCH", 7: "ENCODER_OFFSET_CALIBRATION",
+    8: "CLOSED_LOOP_CONTROL", 9: "LOCKIN_SPIN", 10: "ENCODER_DIR_FIND",
+    11: "HOMING", 12: "HALL_POLARITY_CAL", 13: "HALL_PHASE_CAL",
+}
+
+ODRV_ERR = {
+    0x01: "CONTROL_ITERATION_MISSED", 0x02: "DC_BUS_UNDER_VOLTAGE",
+    0x04: "DC_BUS_OVER_VOLTAGE", 0x08: "DC_BUS_OVER_REGEN_CURRENT",
+    0x10: "DC_BUS_OVER_CURRENT", 0x20: "BRAKE_DEADTIME_VIOLATION",
+    0x40: "BRAKE_DUTY_CYCLE_NAN", 0x80: "INVALID_BRAKE_RESISTANCE",
+}
+AXIS_ERR = {
+    0x01: "INVALID_STATE", 0x40: "MOTOR_FAILED",
+    0x80: "SENSORLESS_ESTIMATOR_FAILED", 0x100: "ENCODER_FAILED",
+    0x200: "CONTROLLER_FAILED", 0x800: "WATCHDOG_TIMER_EXPIRED",
+    0x1000: "MIN_ENDSTOP_PRESSED", 0x2000: "MAX_ENDSTOP_PRESSED",
+    0x4000: "ESTOP_REQUESTED", 0x20000: "HOMING_WITHOUT_ENDSTOP",
+    0x40000: "OVER_TEMP", 0x80000: "UNKNOWN_POSITION",
+}
+MOTOR_ERR = {
+    0x01: "PHASE_RESISTANCE_OUT_OF_RANGE", 0x02: "PHASE_INDUCTANCE_OUT_OF_RANGE",
+    0x08: "DRV_FAULT", 0x10: "CONTROL_DEADLINE_MISSED",
+    0x80: "MODULATION_MAGNITUDE", 0x400: "CURRENT_SENSE_SATURATION",
+    0x1000: "CURRENT_LIMIT_VIOLATION", 0x10000: "MODULATION_IS_NAN",
+    0x20000: "MOTOR_THERMISTOR_OVER_TEMP", 0x40000: "FET_THERMISTOR_OVER_TEMP",
+    0x80000: "TIMER_UPDATE_MISSED", 0x100000: "CURRENT_MEASUREMENT_UNAVAILABLE",
+    0x200000: "CONTROLLER_FAILED", 0x400000: "I_BUS_OUT_OF_RANGE",
+    0x800000: "BRAKE_RESISTOR_DISARMED", 0x1000000: "SYSTEM_LEVEL",
+    0x2000000: "BAD_TIMING", 0x4000000: "UNKNOWN_PHASE_ESTIMATE",
+    0x8000000: "UNKNOWN_PHASE_VEL", 0x10000000: "UNKNOWN_TORQUE",
+    0x20000000: "UNKNOWN_CURRENT_COMMAND", 0x40000000: "UNKNOWN_CURRENT_MEASUREMENT",
+    0x80000000: "UNKNOWN_VBUS_VOLTAGE",
+}
+ENC_ERR = {
+    0x01: "UNSTABLE_GAIN", 0x02: "CPR_POLEPAIRS_MISMATCH",
+    0x04: "NO_RESPONSE", 0x08: "UNSUPPORTED_ENCODER_MODE",
+    0x10: "ILLEGAL_HALL_STATE", 0x20: "INDEX_NOT_FOUND_YET",
+    0x40: "ABS_SPI_TIMEOUT", 0x80: "ABS_SPI_COM_FAIL",
+    0x100: "ABS_SPI_NOT_READY", 0x200: "HALL_NOT_CALIBRATED_YET",
+}
+CTRL_ERR = {
+    0x01: "OVERSPEED", 0x02: "INVALID_INPUT_MODE", 0x04: "UNSTABLE_GAIN",
+    0x08: "INVALID_MIRROR_AXIS", 0x10: "INVALID_LOAD_ENCODER",
+    0x20: "INVALID_ESTIMATE", 0x40: "INVALID_CIRCULAR_RANGE",
+    0x80: "SPINOUT_DETECTED",
+}
+
+
+def decode_error(mask, table):
+    if not mask:
+        return "OK"
+    names = [name for bit, name in table.items() if mask & bit]
+    if names:
+        return "0x%x (%s)" % (mask, " | ".join(names))
+    return "0x%x (unknown)" % mask
+
+
+class Device:
+    def __init__(self, timeout=6):
+        self.dev = None
+        self.error = ""
+        self.connect(timeout)
+
+    def connect(self, timeout=6):
+        try:
+            self.dev = odrive.find_sync(timeout=timeout)
+            self.error = ""
+            return True
+        except AssertionError:
+            self.dev = None
+            self.error = "设备被其它程序占用（关掉 Web GUI / odrivetool / 其它脚本）"
+            return False
+        except Exception as e:
+            self.dev = None
+            self.error = "%s: %s" % (type(e).__name__, e)
+            return False
+
+    def rd(self, path):
+        o = self.dev
+        for a in path.split("."):
+            o = getattr(o, a)
+        return o
+
+    def wr(self, path, value):
+        o = self.dev
+        parts = path.split(".")
+        for a in parts[:-1]:
+            o = getattr(o, a)
+        setattr(o, parts[-1], value)
+
+    def state_name(self):
+        try:
+            s = self.rd("axis0.current_state")
+            return AXIS_STATE.get(s, str(s))
+        except Exception:
+            return "?"
+
+    def status(self):
+        out = {}
+        for key, path in [
+            ("vbus", "vbus_voltage"), ("ibus", "ibus"),
+            ("state", "axis0.current_state"),
+            ("vel", "axis0.encoder.vel_estimate"),
+            ("vel_set", "axis0.controller.vel_setpoint"),
+            ("pos", "axis0.encoder.pos_estimate"),
+            ("iq", "axis0.motor.current_control.Iq_measured"),
+            ("odrv_err", "error"),
+            ("axis_err", "axis0.error"),
+            ("motor_err", "axis0.motor.error"),
+            ("enc_err", "axis0.encoder.error"),
+            ("ctrl_err", "axis0.controller.error"),
+            ("pre_cal", "axis0.encoder.config.pre_calibrated"),
+            ("sensorless", "axis0.config.enable_sensorless_mode"),
+        ]:
+            try:
+                out[key] = self.rd(path)
+            except Exception:
+                out[key] = None
+        return out
+
+    def errors_ok(self):
+        s = self.status()
+        return all(not s.get(k) for k in ("odrv_err", "axis_err", "motor_err", "enc_err", "ctrl_err"))
+
+    def ensure_closed_loop(self, mode=2):
+        if self.rd("axis0.current_state") != 8:
+            try:
+                self.wr("axis0.controller.input_vel", 0.0)
+            except Exception:
+                pass
+            self.wr("axis0.controller.config.control_mode", mode)
+            self.wr("axis0.controller.config.input_mode", 1)
+            self.wr("axis0.requested_state", 8)
