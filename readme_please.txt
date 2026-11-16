@@ -23,6 +23,8 @@ interface_generator_stub.py --definitions odrive-interface.yaml --generate-endpo
 interface_generator_stub.py --definitions odrive-interface.yaml --template fibre-cpp/type_info_template.j2 --output autogen/type_info.hpp
 
 
+bash setup_env.sh
+bash setup_env.sh --with-udev
 
 odrive page
 
