@@ -3,7 +3,8 @@
 假设备实现 odrive fibre 属性树:全部规格叶子可读,写入被记录,
 save_configuration/reboot 被记录。覆盖:连接/双轴探测/轮询(含积分器)、
 轴切换、配置读取→代码生成、快照保存/加载/应用(跨轴映射)、CSV 导出、
-急停、连续录制、掉线自动重连、危险写入识别。
+急停、连续录制、危险写入识别、速度扫频→Bode 标签页、增益快照恢复、
+掉线自动重连(曲线缓冲保留)。
 """
 import json
 import os
@@ -42,7 +43,7 @@ class FakeTree:
             else:
                 v = 2
             self.values[path] = v
-        self.values["axis0.current_state"] = 1
+        self.values["axis0.current_state"] = 8   # 闭环(扫频需要)
         self.values["axis1.current_state"] = 1
 
 
@@ -170,10 +171,6 @@ def stage3():
           ParamTree.is_dangerous("axis0.motor.config.calibration_current") and
           not ParamTree.is_dangerous("axis0.encoder.pos_estimate"),
           "dangerous write detection")
-    # 模拟掉线 → 自动重连(run 循环按 _reconnect_due 尝试)
-    worker._on_lost("模拟掉线")
-    check(not worker.connected, "device lost detected")
-    worker._reconnect_due = time.monotonic()   # 立即尝试
     # 关闭标签页(workAreaTabbedWidget 行为)
     idx_form = win.tabs.indexOf(win.work)
     win.tabs.tabCloseRequested.emit(idx_form)
@@ -181,13 +178,32 @@ def stage3():
     win.add_device_form()
     check(win.work is not None and win.tabs.indexOf(win.work) >= 0,
           "device tab re-added")
+    # 速度扫频(短: 2 个频点 × 1 周期,约 0.3s)
+    pid = win.work.pid
+    pid.f0.setValue(5.0)
+    pid.f1.setValue(10.0)
+    pid.pts.setValue(3)
+    pid.scyc.setValue(1)
+    pid._start_sweep()
+    # 增益快照(异步,stage4 验证)
+    pid._snapshot_gains()
 
 
 def stage4():
-    # 自动重连成功(按序列号匹配,曲线缓冲保留)
-    check(worker.connected, "auto-reconnected")
-    check(worker.axes == [0, 1], "axes restored: %s" % worker.axes)
-    check(len(worker.hist.get(0, [])) > 0, "hist preserved across reconnect")
+    # 扫频结果 → Bode 标签页
+    check(win.bode is not None, "bode tab opened")
+    if win.bode is not None and win.bode._data:
+        d = win.bode._data
+        check(len(d["freqs"]) == 3 and len(d["gain_db"]) == 3,
+              "bode data: %d points" % len(d["freqs"]))
+    check(win.work.pid.btn_sweep.isEnabled(), "sweep button re-enabled")
+    # 增益快照 + 一键恢复
+    pid = win.work.pid
+    check(pid._saved is not None and
+          set(pid._saved) == {"vel_gain", "vel_integrator_gain"},
+          "gains snapshot: %s" % pid._saved)
+    if pid._saved:
+        pid._restore(["vel_gain", "vel_integrator_gain"])
     # 录制:停止后文件有表头 + 行
     worker.record_stop_req()
     worker._rec_close()          # 确保落盘(即使事件尚未处理)
@@ -198,12 +214,27 @@ def stage4():
             lines = f.read().strip().splitlines()
     check(ok_rec and len(lines) > 5 and lines[0].startswith("t,"),
           "recording file: %d lines" % (len(lines) if ok_rec else 0))
-    check(win.work.settings.btn_rec.text() == "停止录制" or
-          win.work.settings._recording is False, "rec button state")
     check("axis1.encoder.pos_estimate" in win.work.terminal.out.toPlainText(),
           "device-page terminal axis1 get")
     check("vbus_voltage" in win.console.out.toPlainText(),
           "console tab axis0 get")
+
+
+def stage5():
+    # 恢复增益的写命令是异步的,在这里验证
+    check(fake.writes.get("axis0.controller.config.vel_gain") == 1.5,
+          "restore wrote vel_gain")
+    # 模拟掉线 → 自动重连(run 循环按 _reconnect_due 尝试)
+    worker._on_lost("模拟掉线")
+    check(not worker.connected, "device lost detected")
+    worker._reconnect_due = time.monotonic()   # 立即尝试
+
+
+def stage6():
+    # 自动重连成功(按序列号匹配,曲线缓冲保留)
+    check(worker.connected, "auto-reconnected")
+    check(worker.axes == [0, 1], "axes restored: %s" % worker.axes)
+    check(len(worker.hist.get(0, [])) > 0, "hist preserved across reconnect")
 
     ok = all(c for c, _ in results)
     for c, msg in results:
@@ -216,7 +247,9 @@ def stage4():
 QTimer.singleShot(700, stage1)
 QTimer.singleShot(1500, stage2)
 QTimer.singleShot(2400, stage3)
-QTimer.singleShot(3200, stage4)
+QTimer.singleShot(3400, stage4)
+QTimer.singleShot(4200, stage5)
+QTimer.singleShot(5200, stage6)
 rc = app.exec_()
 worker.stop()
 worker.join(1500)

@@ -51,7 +51,12 @@ WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 - **控制环模式**:下拉框选择 速度/位置/力矩(写 control_mode);进入闭环/回 IDLE
   在“通用控制”里(同 SFS 的 Disable Device)
 - **PID 控制器配置**:选择环(速度环/位置环)下拉切换参数行,每行 读/写 +
-  全部读取;阶跃测试(幅度/时长/开始)直接观察上方主曲线的响应
+  全部读取;阶跃测试(**单步/方波**,幅度/时长/周期数)直接观察上方主曲线的响应;
+  **速度扫频**(对数频点正弦 + 锁相分析)生成幅频/相频曲线,
+  结果在"Bode 响应"标签页查看/导出 CSV —— 用于估速度环带宽、发现机械谐振。
+  测试/扫频开始时自动保存速度环增益,可一键"恢复增益";
+  可勾选"测试期间积分增益置 0"观察纯比例响应,结束后自动写回。
+  注意:增益/限幅等参数位于 `controller.config.*`(0.5.x 固件)
 - **添加设备 ▾**:树形视图(参数树标签页)/ 表格视图(设备页),与 SFS 的
   addDeviceMenu 一致;设备页可关闭后重新添加
 - **打开 / 保存**:配置快照 JSON 的载入与保存(生成代码页承载)
@@ -80,7 +85,7 @@ WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 | 点动 / 设定值 | deviceJoggingControl | 速度设定+快捷档位、点动(按住生效)、位置绝对/相对 |
 | 通用控制 | generalControls | 进入闭环/回 IDLE、电机/编码器标定、保存配置、清除错误、全轴急停 |
 | 通用设置 | generalSettingsWidget | 电流限幅、曲线清空/导出 CSV、连续录制(边采边写) |
-| PID 调参 | pidConfiguration | vel_gain / vel_integrator_gain / pos_gain / vel_limit / vel_ramp_rate 单项或批量读写,速度阶跃测试并绘制 setpoint 与实际响应 |
+| PID 调参 | pidConfiguration | vel_gain / vel_integrator_gain / pos_gain / vel_limit / vel_ramp_rate 单项或批量读写;单步/方波阶跃测试;**速度扫频→Bode 响应标签页**(锁相法幅相特性);增益快照一键恢复、测试期间积分置 0 |
 | 设备(树形视图) | treeViewConfigTool | 解析固件仓库的 `odrive-interface.yaml`(约 680 个可读属性),惰性加载、按名过滤、双击写入(仅 rw),错误位自动翻译 |
 | 生成代码 | generatedCodeDisplay | 读当前配置生成 odrivetool 风格 Python 初始化脚本(带单位/说明注释),可复制或导出 .py |
 | 配置快照 | 打开/保存工具按钮 | 配置保存为 JSON / 加载后写回设备,支持 axis0↔axis1 映射,应用后可选自动 save_configuration |
@@ -117,6 +122,10 @@ USB 卡顿时界面不冻结。设备层常量(错误码表等)在 `OdrvStudio/d
   `save` 会重启设备(WSL 下需重新 `usbipd attach`)。
 - 监控曲线数据保存在后台线程的环形缓冲(默认 60 s),暂停只影响显示;
   “导出 CSV”输出各轴速度/位置/Iq/积分器及母线电压电流;
-  需要完整记录时用“开始录制”(直接落盘,无时长限制)
+  需要完整记录时用“开始录制”(直接落盘,无时长限制)。
+- **扫频说明**:激励以 250 Hz 更新 `input_vel`,以约 125 Hz 采样 `vel_estimate`,
+  锁相分析逐频点计算幅相(自动去直流、跳过每段前半周期瞬态)。
+  扫频期间主曲线只更新速度;急停/停止会立即中止扫频并把 input_vel 归零。
+  默认 1–20 Hz / 12 点 / 每点 3 周期,全程约 12 s。
 - 配置快照 JSON 包含固件版本与序列号,加载时会显示来源,应用前请核对。
   自动重连同样按序列号匹配,换板子后请手动断开再连接

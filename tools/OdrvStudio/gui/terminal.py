@@ -111,7 +111,7 @@ class Terminal(QWidget):
         elif low == "start":
             self.worker.action_req("start")
         elif low in ("stop", "estop"):
-            self.worker.action_req("stop")
+            self.worker.stop_req()
         elif low.startswith("cal"):
             parts = low.split()
             if len(parts) == 2 and parts[1] in ("motor", "encoder"):

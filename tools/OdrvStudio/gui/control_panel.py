@@ -96,7 +96,7 @@ class GeneralControlsBox(_AxisBox):
             lambda: self.worker.action_req("clear_errors"))
         self.btn_start.clicked.connect(self._on_start)
         self.btn_stop.clicked.connect(self._on_stop)
-        self.btn_estop.clicked.connect(lambda: self.worker.action_req("estop"))
+        self.btn_estop.clicked.connect(lambda: self.worker.estop_req())
 
     def _on_start(self):
         num = self.worker.snapshot.get(
@@ -106,7 +106,7 @@ class GeneralControlsBox(_AxisBox):
         self.worker.action_req("start", self.axis)
 
     def _on_stop(self):
-        self.worker.action_req("stop", self.axis)
+        self.worker.stop_req(self.axis)
 
     def update_state(self, snap):
         state = snap.get(self._p("current_state"))

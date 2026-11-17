@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
     QToolBar, QToolButton,
 )
 
+from .bode_tab import BodeTab
 from .config_panel import ConfigPanel
 from .param_tree import ParamTree
 from .terminal import Terminal
@@ -52,6 +53,7 @@ class MainWindow(QMainWindow):
         self.tree = None       # 参数树(树形视图)
         self.config = None     # 生成代码 / 配置快照
         self.console = None    # 命令行交互
+        self.bode = None       # Bode 响应(扫频)
 
         # ---- 顶部工具栏 ----
         self._build_toolbar()
@@ -69,8 +71,7 @@ class MainWindow(QMainWindow):
         # ---- 全局急停快捷键(窗口聚焦即生效,优先于控件) ----
         for key in ("Ctrl+.", "Ctrl+Shift+E"):
             sc = QShortcut(QKeySequence(key), self)
-            sc.activated.connect(
-                lambda: self.worker.action_req("estop"))
+            sc.activated.connect(lambda: self.worker.estop_req())
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._on_timer)
@@ -133,7 +134,7 @@ class MainWindow(QMainWindow):
             "QToolButton{background:#b71c1c;color:white;font-weight:bold;"
             "padding:3px 8px;border-radius:3px;}"
             "QToolButton:hover{background:#d32f2f;}")
-        btn_estop.clicked.connect(lambda: self.worker.action_req("estop"))
+        btn_estop.clicked.connect(lambda: self.worker.estop_req())
         tb.addWidget(btn_estop)
 
         tb.addSeparator()
@@ -213,6 +214,8 @@ class MainWindow(QMainWindow):
             self.config = None
         elif w is self.console:
             self.console = None
+        elif w is self.bode:
+            self.bode = None
         self.tabs.removeTab(index)
 
     # ---- 周期刷新 ----
@@ -246,6 +249,12 @@ class MainWindow(QMainWindow):
         elif kind == "reconnecting":
             if self.work is not None:
                 self.work.set_reconnecting(ev[1])
+        elif kind == "bode_result":
+            if self.bode is None:
+                self.bode = BodeTab()
+                self.tabs.addTab(self.bode, "Bode 响应")
+            self.bode.set_data(ev[1])
+            self.tabs.setCurrentWidget(self.bode)
         elif kind == "log":
             self.statusBar().showMessage(ev[1], 5000)
         elif kind == "wr_done":

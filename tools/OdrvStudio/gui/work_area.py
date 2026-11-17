@@ -207,7 +207,7 @@ class WorkArea(QWidget):
         # ---- 第二行: 实时曲线 ----
         self.monitor = MonitorWidget()
         self.monitor.stopRequested.connect(
-            lambda: self.worker.action_req("stop", self.axis))
+            lambda: self.worker.stop_req(self.axis))
         split.addWidget(self.monitor)
 
         # ---- 第三行: PID | 通用控制+设置 | 命令行+点动 ----

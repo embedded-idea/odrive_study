@@ -197,18 +197,18 @@ class MonitorWidget(QWidget):
         if "common" not in self._t0:
             self._t0["common"] = hist[any_axis][0][0]
         t0_c = self._t0["common"]
-        common = {n: [] for n in ("vbus", "ibus")}
-        ts_c = []
+        common = {n: ([], []) for n in ("vbus", "ibus")}
         for row in hist[any_axis]:
-            ts_c.append(row[0] - t0_c)
             for i, n in zip((6, 7), ("vbus", "ibus")):
                 v = row[i]
-                common[n].append(v if isinstance(v, (int, float)) else 0.0)
+                if isinstance(v, (int, float)):
+                    common[n][0].append(row[0] - t0_c)
+                    common[n][1].append(v)
 
         for key, c in self.curves.items():
             meta = self._meta[key]
             if meta[0] == "common":
-                c.setData(ts_c, common[meta[1]])
+                c.setData(common[meta[1]][0], common[meta[1]][1])
                 continue
             _, axis, field = meta
             rows = hist.get(axis)
@@ -217,10 +217,12 @@ class MonitorWidget(QWidget):
             if axis not in self._t0:
                 self._t0[axis] = rows[0][0]
             ts, vals = [], []
+            idx = ROW_NAMES.index(field) + 1
             for row in rows:
-                ts.append(row[0] - self._t0[axis])
-                v = row[ROW_NAMES.index(field) + 1]
-                vals.append(v if isinstance(v, (int, float)) else 0.0)
+                v = row[idx]
+                if isinstance(v, (int, float)):
+                    ts.append(row[0] - self._t0[axis])
+                    vals.append(v)
             ts, vals = self._downsample(ts, vals, n_max)
             c.setData(ts, vals)
 

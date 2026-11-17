@@ -4,6 +4,7 @@
 避免 GUI 卡顿,也避免多线程并发访问设备。
 """
 
+import math
 import queue
 import threading
 import time
@@ -24,6 +25,8 @@ HIST_PATHS = {
 HIST_FIELDS = ("t",) + tuple(HIST_PATHS) + ("vbus", "ibus")
 HIST_WINDOW_S = 60
 RECONNECT_DELAY_S = 2.0
+SWEEP_WRITE_INTERVAL = 0.004   # 扫频时 input_vel 更新间隔(250 Hz)
+SWEEP_POLL_DIV = 2             # 每 2 次写读一次 vel(采样 ≈ 125 Hz)
 
 COMMON_FAST = ["vbus_voltage", "ibus"]
 COMMON_SLOW = [
@@ -99,6 +102,10 @@ class DeviceWorker(threading.Thread):
         self._rec = None
         self._rec_count = 0
 
+        # 速度扫频(锁相法 Bode)
+        self._sweep_active = False
+        self._sweep_cancel = False
+
     # ---------- GUI 侧接口 ----------
 
     def subscribe(self, fn):
@@ -144,6 +151,23 @@ class DeviceWorker(threading.Thread):
 
     def set_auto_reconnect(self, on):
         self.post("set_auto_reconnect", bool(on))
+
+    def estop_req(self):
+        """全轴急停;若正在扫频先中止(扫频会阻塞命令队列)。"""
+        self._sweep_cancel = True
+        self.post("action", "estop", None)
+
+    def stop_req(self, axis=None):
+        """单轴停止;若正在扫频先中止。"""
+        self._sweep_cancel = True
+        self.post("action", "stop", axis)
+
+    def sweep_req(self, params):
+        """速度扫频: {axis, f0, f1, points, cycles, amp}。"""
+        self.post("sweep", dict(params))
+
+    def sweep_cancel(self):
+        self._sweep_cancel = True
 
     def stop(self):
         self._stop_evt.set()
@@ -199,6 +223,8 @@ class DeviceWorker(threading.Thread):
                     self.auto_reconnect = cmd[1]
                     if not cmd[1]:
                         self._reconnect_wanted = False
+                elif kind == "sweep":
+                    self._do_sweep(cmd[1])
             except Exception as e:
                 self._emit("log", "[err] %s: %s" % (type(e).__name__, e))
 
@@ -276,6 +302,7 @@ class DeviceWorker(threading.Thread):
         self._slow_paths = slow
 
     def _do_disconnect(self):
+        self._sweep_cancel = True
         self._dev_close()
         self.connected = False
         self.axes = [0]
@@ -284,6 +311,7 @@ class DeviceWorker(threading.Thread):
         self._emit("disconnected", "手动断开")
 
     def _on_lost(self, reason):
+        self._sweep_cancel = True
         self._dev_close()
         self.connected = False
         self.snapshot = {}
@@ -411,6 +439,119 @@ class DeviceWorker(threading.Thread):
             return
         self._rec_close()
 
+    # ---- 速度扫频(锁相法 Bode) ----
+
+    def _do_sweep(self, p):
+        axis = int(p.get("axis", 0))
+        f0 = max(0.1, float(p.get("f0", 1.0)))
+        f1 = max(f0, float(p.get("f1", 20.0)))
+        n_pts = max(2, int(p.get("points", 12)))
+        cycles = max(1, int(p.get("cycles", 3)))
+        amp = float(p.get("amp", 1.0))
+        in_path = "axis%d.controller.input_vel" % axis
+        vel_path = "axis%d.encoder.vel_estimate" % axis
+        self._sweep_active = True
+        self._sweep_cancel = False   # 清掉上次急停遗留的取消标志
+        try:
+            state = self.snapshot.get("axis%d.current_state" % axis)
+            if state != 8:
+                self._emit("log", "[扫频] 需先进入闭环(当前 %s),已取消"
+                           % (AXIS_STATE.get(state, state) if isinstance(state, int)
+                              else "未知"))
+                return
+            mode = self.snapshot.get(
+                "axis%d.controller.config.control_mode" % axis)
+            if mode != 2:
+                self.dev.wr("axis%d.controller.config.control_mode" % axis, 2)
+                self._emit("log", "[扫频] 已切换到速度模式")
+            freqs = [f0 * (f1 / f0) ** (j / (n_pts - 1)) for j in range(n_pts)]
+            results = []
+            for f in freqs:
+                if self._sweep_cancel or self._stop_evt.is_set():
+                    break
+                r = self._sweep_segment(axis, f, cycles, amp, in_path, vel_path)
+                if r is not None:
+                    results.append(r)
+            try:
+                self.dev.wr(in_path, 0.0)
+            except Exception:
+                pass
+            if results:
+                self._emit("bode_result", {
+                    "axis": axis,
+                    "freqs": [r[0] for r in results],
+                    "gain_db": [r[1] for r in results],
+                    "phase_deg": [r[2] for r in results],
+                    "amp": amp, "cycles": cycles,
+                })
+        except Exception as e:
+            try:
+                self.dev.wr(in_path, 0.0)
+            except Exception:
+                pass
+            self._emit("log", "[扫频] 失败: %s: %s" % (type(e).__name__, e))
+        finally:
+            self._sweep_active = False
+            self._sweep_cancel = False
+            self._emit("sweep_done", True)
+
+    def _sweep_segment(self, axis, f, cycles, amp, in_path, vel_path):
+        """单个频点:发 cycles 个正弦周期,锁相算 |H| 与相位。"""
+        dur = cycles / f
+        w = 2.0 * math.pi * f
+        t0 = time.monotonic()
+        seg_end = t0 + dur
+        next_t = t0
+        i = 0
+        samples = []
+        while True:
+            now = time.monotonic()
+            if now >= seg_end or self._sweep_cancel or self._stop_evt.is_set():
+                break
+            try:
+                self.dev.wr(in_path, amp * math.sin(w * (now - t0)))
+            except Exception:
+                raise
+            i += 1
+            if i % SWEEP_POLL_DIV == 0:
+                # 轻量采样: 只读 vel_estimate(完整轮询太重,会拖慢激励)
+                v = self.dev.rd(vel_path)
+                self.snapshot[vel_path] = v
+                samples.append((time.monotonic() - t0, v))
+                h = self.hist.get(axis)
+                if h is not None:   # 主曲线继续(仅速度,其余字段留空)
+                    h.append((time.time(), v, None, None, None, None,
+                              self.snapshot.get("vbus_voltage"),
+                              self.snapshot.get("ibus")))
+            next_t += SWEEP_WRITE_INTERVAL
+            now = time.monotonic()
+            if next_t > now:
+                time.sleep(min(next_t - now, SWEEP_WRITE_INTERVAL))
+            else:
+                next_t = now
+        # 锁相分析(跳过前半个周期的瞬态;先去直流,防止偏置泄漏)
+        pts = [(tau, v) for tau, v in samples
+               if tau > 0.5 / f and isinstance(v, (int, float))]
+        if len(pts) < 4:
+            return None
+        tau_end = pts[-1][0]
+        tau_start = pts[0][0]
+        T = tau_end - tau_start
+        if T <= 0:
+            return None
+        dt = T / (len(pts) - 1)
+        mean_v = sum(v for _, v in pts) / len(pts)
+        acc_s = acc_c = 0.0
+        for tau, v in pts:
+            v -= mean_v
+            acc_s += v * math.sin(w * tau)
+            acc_c += v * math.cos(w * tau)
+        s_out = 2.0 * acc_s * dt / T     # B·cosφ
+        c_out = 2.0 * acc_c * dt / T     # B·sinφ
+        mag = math.hypot(s_out, c_out) / max(abs(amp), 1e-9)
+        phase = math.degrees(math.atan2(c_out, s_out))
+        return (f, 20.0 * math.log10(max(mag, 1e-6)), phase)
+
     # ---- 读写 ----
 
     def _do_wr(self, path, value):
@@ -418,6 +559,8 @@ class DeviceWorker(threading.Thread):
             return
         try:
             self.dev.wr(path, value)
+            if path in self._fast_paths or path in self._slow_paths:
+                self.snapshot[path] = value   # DRO/显示立即反映
             self._emit("wr_done", path, True, "")
         except Exception as e:
             self._emit("wr_done", path, False, "%s: %s" % (type(e).__name__, e))
@@ -448,6 +591,7 @@ class DeviceWorker(threading.Thread):
         d = self.dev
         try:
             if name == "estop":
+                self._sweep_cancel = True
                 for a in self.axes:
                     self._axis_stop(d, a)
             elif name in ("start", "stop", "cal_motor", "cal_encoder"):
