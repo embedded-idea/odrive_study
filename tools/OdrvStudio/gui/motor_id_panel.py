@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ..device import AXIS_ERR, MOTOR_ERR, decode_error, state_name
+from .theme import tag
 
 MOTOR_TYPES = (("高电流 (0)", 0), ("云台 (2)", 2), ("交流感应 (3)", 3))
 
@@ -75,10 +76,12 @@ class MotorParamPanel(QGroupBox):
         g.addWidget(self.cal_v, 1, 3)
 
         self.btn_start = QPushButton("开始识别")
+        tag(self.btn_start, "primary")
         self.btn_start.setToolTip(
             "写校准参数 → 电机标定(若在闭环会先停)→ 跟踪进度 → 读实测 R/L。\n"
             "期间急停/停止会中止;完成后与旧配置对比并给出类型建议")
         self.btn_apply = QPushButton("应用实测值")
+        tag(self.btn_apply, "success")
         self.btn_apply.setEnabled(False)
         self.btn_apply.setToolTip(
             "写入实测 R/L 并置 pre_calibrated=True(下次可跳过电机校准);\n"

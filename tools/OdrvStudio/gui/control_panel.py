@@ -13,6 +13,8 @@ from PyQt5.QtWidgets import (
     QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QPushButton,
 )
 
+from .theme import tag
+
 MODES = [("速度模式", 2), ("位置模式", 3), ("力矩模式", 1)]
 STATE_CLOSED_LOOP = 8
 STATE_IDLE = 1
@@ -70,6 +72,7 @@ class GeneralControlsBox(_AxisBox):
         g.setContentsMargins(6, 2, 6, 4)
         g.setSpacing(3)
         self.btn_start = QPushButton("进入闭环")
+        tag(self.btn_start, "success")
         self.btn_stop = QPushButton("回 IDLE")
         self.btn_estop = QPushButton("⛔ 急停")
         self.btn_estop.setToolTip("全部轴立即回 IDLE")
@@ -129,6 +132,7 @@ class TorqueBox(_AxisBox):
         self.torque_spin.setSingleStep(0.05)
         g.addWidget(self.torque_spin, 0, 0)
         self.btn_torque = QPushButton("发送")
+        tag(self.btn_torque, "primary")
         self.btn_torque.clicked.connect(self._send_torque)
         g.addWidget(self.btn_torque, 0, 1)
 
@@ -151,11 +155,14 @@ class JogControlBox(_AxisBox):
         self.vel_spin.setSingleStep(0.05)
         g.addWidget(self.vel_spin, 0, 0, 1, 2)
         self.btn_vel_send = QPushButton("发送")
+        tag(self.btn_vel_send, "primary")
         self.btn_vel_send.clicked.connect(
             lambda: self.send_vel(self.vel_spin.value()))
         g.addWidget(self.btn_vel_send, 0, 2)
         self.btn_jog_ccw = QPushButton("◀ 点动")
         self.btn_jog_cw = QPushButton("点动 ▶")
+        tag(self.btn_jog_ccw, "tonal")
+        tag(self.btn_jog_cw, "tonal")
         g.addWidget(self.btn_jog_ccw, 0, 3)
         g.addWidget(self.btn_jog_cw, 0, 4)
         self.btn_jog_ccw.pressed.connect(

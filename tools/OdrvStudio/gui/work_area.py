@@ -18,6 +18,7 @@ from .monitor import DROWidget, MonitorWidget
 from .motor_id_panel import MotorParamPanel
 from .pid_panel import PidPanel
 from .terminal import Terminal
+from .theme import tag
 
 
 class ConnectionControlBox(QGroupBox):
@@ -32,6 +33,7 @@ class ConnectionControlBox(QGroupBox):
         self.led = QLabel("●")
         self.led.setStyleSheet("color:#666; font-size:15px;")
         self.btn_connect = QPushButton("连接")
+        tag(self.btn_connect, "primary")
         self.btn_connect.clicked.connect(self._toggle)
         g.addWidget(self.led, 0, 0)
         g.addWidget(self.btn_connect, 0, 1)
@@ -124,11 +126,13 @@ class GeneralSettingsBox(QGroupBox):
         self.lim_spin.setSingleStep(1.0)
         g.addWidget(self.lim_spin, 0, 1)
         self.btn_lim = QPushButton("写入")
+        tag(self.btn_lim, "primary")
         self.btn_lim.clicked.connect(self._write_lim)
         g.addWidget(self.btn_lim, 0, 2)
         self.btn_clear = QPushButton("清空曲线")
         self.btn_csv = QPushButton("导出 CSV")
         self.btn_rec = QPushButton("开始录制")
+        tag(self.btn_rec, "tonal")
         self.btn_rec.setToolTip("边采边写 CSV(按轮询频率落盘),\n"
                                 "断线时暂停写入、重连后继续;不会受 60s 曲线缓冲限制")
         g.addWidget(self.btn_clear, 1, 0)

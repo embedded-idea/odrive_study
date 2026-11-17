@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
 from ..device import (
     AXIS_ERR, CTRL_ERR, ENC_ERR, MOTOR_ERR, ODRV_ERR, decode_error,
 )
+from .theme import tag
 
 ERR_TABLES = {
     "error": ODRV_ERR,
@@ -61,6 +62,7 @@ class Terminal(QWidget):
         self.prompt.setFont(QFont("Consolas, monospace"))
         self.prompt.setPlaceholderText("输入命令,回车执行(help 查看帮助)")
         btn = QPushButton("发送")
+        tag(btn, "primary")
         btn_clear = QPushButton("清空")
         bar.addWidget(self.prompt, 1)
         bar.addWidget(btn)

@@ -15,6 +15,8 @@ from PyQt5.QtWidgets import (
     QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
+from .theme import tag
+
 LOOPS = {
     "速度环": [
         ("比例增益", "vel_gain", 0.0, 100.0, 0.005),
@@ -107,6 +109,7 @@ class PidPanel(QWidget):
         self.cyc.setValue(3)
         self.cyc.setToolTip("方波周期数(仅方波)")
         self.btn_test = QPushButton("开始")
+        tag(self.btn_test, "primary")
         for col, w in enumerate((lab, self.wave_combo)):
             test.addWidget(w, 0, col)
         test.addWidget(QLabel("幅度"), 0, 2)
@@ -141,6 +144,7 @@ class PidPanel(QWidget):
         self.scyc.setValue(3)
         self.scyc.setToolTip("每个频点发送的正弦周期数(越大越准、越慢)")
         self.btn_sweep = QPushButton("开始扫频")
+        tag(self.btn_sweep, "primary")
         self.btn_sweep.setToolTip(
             "对数频点逐点发正弦,锁相分析幅相 → Bode 响应标签页。\n"
             "要求:已进入闭环 + 速度模式(自动切换);\n"
@@ -163,6 +167,7 @@ class PidPanel(QWidget):
         self.chk_zero = QCheckBox("测试期间积分增益置 0")
         self.chk_zero.setToolTip("观察纯比例响应;结束后自动写回原值")
         self.btn_restore = QPushButton("恢复增益")
+        tag(self.btn_restore, "tonal")
         self.btn_restore.setEnabled(False)
         self.btn_restore.setToolTip("写回测试/扫频开始时保存的速度环增益")
         self.lab_test = QLabel("")

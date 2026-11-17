@@ -20,18 +20,13 @@ from OdrvStudio.spec import load_spec               # noqa: E402
 
 
 def create_app(argv):
-    """QApplication + 全局样式(浅色,贴近 SimpleFOCStudio 的原生观感)。"""
+    """QApplication + Flutter(Material)浅色主题。"""
     from PyQt5.QtWidgets import QApplication
 
     app = QApplication(argv)
-    app.setStyle("Fusion")
+    from OdrvStudio.gui.theme import apply_material_theme
+    apply_material_theme(app)
     app.setApplicationName("OdrvStudio")
-    app.setStyleSheet(
-        "QGroupBox{font-weight:bold; margin-top:10px; padding-top:4px;}"
-        "QGroupBox::title{subcontrol-origin:margin; left:8px;}"
-        "QToolBar{spacing:4px; padding:2px;}"
-        "QToolBar::separator{width:6px;}"
-    )
     return app
 
 

@@ -74,6 +74,7 @@ class MonitorWidget(QWidget):
         lay.addWidget(lab)
 
         self.plot = pg.PlotWidget()
+        self.plot.setStyleSheet("QGraphicsView{border:1px solid #DADCE0;}")
         self.plot.setLabel("bottom", "时间 [s]")
         self.plot.addLegend(offset=(8, 8), labelTextSize="8pt")
         self.plot.setMouseEnabled(x=True, y=True)

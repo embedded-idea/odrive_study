@@ -5,6 +5,10 @@
 (PyQt5 + PyQtGraph),针对 ODrive v3.6(含 56V 版本)+ 2804 云台电机 +
 AS5047P 适配,支持双轴。
 
+主题为 **Flutter(Material)浅色风格**(见 `gui/theme.py`):卡片式分组、
+圆角填充输入框、描边/填充/淡底三级按钮、下划线标签页;
+曲线绘图区与 DRO 数码管按 SFS 惯例保持黑底。
+
 ## 启动
 
 ```bash

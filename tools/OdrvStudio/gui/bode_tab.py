@@ -24,6 +24,7 @@ class BodeTab(QWidget):
         lay.addWidget(self.lab_info)
 
         self.gain_plot = pg.PlotWidget()
+        self.gain_plot.setStyleSheet("QGraphicsView{border:1px solid #DADCE0;}")
         self.gain_plot.addLegend(offset=(8, 8), labelTextSize="8pt")
         self.gain_plot.setLabel("bottom", "频率 [Hz]")
         self.gain_plot.setLabel("left", "增益 [dB]")
@@ -32,6 +33,7 @@ class BodeTab(QWidget):
         lay.addWidget(self.gain_plot, 1)
 
         self.phase_plot = pg.PlotWidget()
+        self.phase_plot.setStyleSheet("QGraphicsView{border:1px solid #DADCE0;}")
         self.phase_plot.addLegend(offset=(8, 8), labelTextSize="8pt")
         self.phase_plot.setLabel("bottom", "频率 [Hz]")
         self.phase_plot.setLabel("left", "相位 [°]")
