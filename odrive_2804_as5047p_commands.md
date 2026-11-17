@@ -3,7 +3,7 @@
 > 命令怎么用（连接、读/写、标定、运行、排查）见配套文档：
 > **`odrive_commands_usage_guide.md`**
 >
-> 不想敲命令：运行 `./tools/odrvstudio`（OdrvStudio 桌面 GUI，
+> 不想敲命令：运行 `./tools/odrvstudio.sh`（OdrvStudio 桌面 GUI，
 > 详见使用指南第 9 节）。
 
 > 适用环境（本仓库实测）

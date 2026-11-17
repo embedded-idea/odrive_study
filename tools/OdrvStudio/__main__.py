@@ -3,7 +3,7 @@
 用法:
     PYTHONPATH=tools ~/.odrive-venv/bin/python -m OdrvStudio
 或直接:
-    ./tools/odrvstudio
+    ./tools/odrvstudio.sh
 """
 
 import argparse

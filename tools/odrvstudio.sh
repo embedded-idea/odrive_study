@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # OdrvStudio 启动器(PySide6 桌面 GUI,参考 SimpleFOCStudio)
-#   ./tools/odrvstudio [--poll-rate 20]
+#   ./tools/odrvstudio.sh [--poll-rate 20]
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

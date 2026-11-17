@@ -432,7 +432,7 @@ dev0.axis0.requested_state = AXIS_STATE_ENCODER_OFFSET_CALIBRATION
 - 功能：配置向导、实时曲线、参数树、标定、预设管理、命令控制台
 - 第三方项目，先在空载、低电压下试；它同样独占 USB，建议不要和本仓库脚本同时开
 
-### 9.3 本仓库自带 `tools/odrvstudio`（OdrvStudio 桌面 GUI，推荐）
+### 9.3 本仓库自带 `tools/odrvstudio.sh`（OdrvStudio 桌面 GUI，推荐）
 
 参考 SimpleFOCStudio 架构开发的 PyQt5 + PyQtGraph 桌面工作台，
 专门配这套 2804 + AS5047P，支持双轴。依赖 `PyQt5`、`pyqtgraph`（已装入
@@ -442,7 +442,7 @@ dev0.axis0.requested_state = AXIS_STATE_ENCODER_OFFSET_CALIBRATION
 
 ```bash
 cd ~/workspace/odrive_study
-./tools/odrvstudio              # 或 --poll-rate 50 调整轮询频率
+./tools/odrvstudio.sh              # 或 --poll-rate 50 调整轮询频率
 ```
 
 功能：

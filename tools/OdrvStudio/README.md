@@ -12,8 +12,8 @@ AS5047P 适配,支持双轴。
 ## 启动
 
 ```bash
-./tools/odrvstudio                 # 默认 20 Hz 轮询
-./tools/odrvstudio --poll-rate 50
+./tools/odrvstudio.sh                 # 默认 20 Hz 轮询
+./tools/odrvstudio.sh --poll-rate 50
 ```
 
 不通过启动器:
@@ -99,7 +99,7 @@ WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 ## 代码结构(对照 SimpleFOCStudio)
 
 ```
-simpleFOCStudio.py             →  tools/odrvstudio(启动器)+ OdrvStudio/__main__.py
+simpleFOCStudio.py             →  tools/odrvstudio.sh(启动器)+ OdrvStudio/__main__.py
 src/simpleFOCConnector.py      →  OdrvStudio/device_worker.py(后台线程:轮询/命令/事件,双轴)
 (device.json)                  →  OdrvStudio/spec.py(解析 odrive-interface.yaml)
 src/gui/mainWindow.py          →  OdrvStudio/gui/main_window.py(顶部工具栏 + 多标签)
