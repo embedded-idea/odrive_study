@@ -1,0 +1,18 @@
+# OdrvStudio / 本仓库工具依赖
+# 实测环境: Python 3.8 + WSL2 (WSLg), 版本与 ~/.odrive-venv 一致
+# 安装: ~/.odrive-venv/bin/pip install -r requirements.txt
+
+# ODrive 官方库 / odrivetool 同款 (fibre USB 协议;自动带入 pyserial、
+# numpy、matplotlib、requests 等传递依赖)
+odrive==0.5.4
+
+# GUI
+PyQt5==5.15.11
+pyqtgraph==0.13.3
+
+# 参数树解析 (odrive-interface.yaml)
+PyYAML==6.0.3
+
+# WSL 下 PyQt5 xcb 平台插件需要的系统库 (apt 安装, 非 pip):
+#   sudo apt-get install libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+#       libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0
