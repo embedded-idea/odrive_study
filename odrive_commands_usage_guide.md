@@ -434,9 +434,9 @@ dev0.axis0.requested_state = AXIS_STATE_ENCODER_OFFSET_CALIBRATION
 
 ### 9.3 本仓库自带 `tools/odrvstudio.sh`（OdrvStudio 桌面 GUI，推荐）
 
-参考 SimpleFOCStudio 架构开发的 PyQt5 + PyQtGraph 桌面工作台，
-专门配这套 2804 + AS5047P，支持双轴。依赖 `PyQt5`、`pyqtgraph`（已装入
-`~/.odrive-venv`）；WSL 下需要 WSLg（Win11）或 X server。
+参考 SimpleFOCStudio 架构开发的 PySide6 + PyQtGraph 桌面工作台，
+专门配这套 2804 + AS5047P，支持双轴。依赖见 `tools/OdrvStudio/requirements.txt`
+（PySide6、pyqtgraph、PyYAML、odrive）；WSL 下需要 WSLg（Win11）或 X server。
 
 启动：
 
