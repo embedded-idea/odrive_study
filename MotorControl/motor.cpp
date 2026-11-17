@@ -612,6 +612,13 @@ void Motor::current_meas_cb(uint32_t timestamp, std::optional<Iph_ABC_t> current
     if (armed_state_ == 1 || armed_state_ == 2) {
         current_meas_ = {0.0f, 0.0f, 0.0f};
         armed_state_ += 1;
+    } else if (!is_armed_) {
+        // PWM outputs are off: the raw ADC values handed in by the board layer
+        // are forced to zero, so "raw - DC_calib_" would show a phantom current
+        // equal to the amplifier offset. This is negligible on DRV8301 boards
+        // (trimmed op-amps) but several amps on EG2134 boards with external
+        // op-amps. Report zero while disarmed.
+        current_meas_ = {0.0f, 0.0f, 0.0f};
     } else if (current.has_value() && dc_calib_valid) {
         current_meas_ = {
             current->phA - DC_calib_.phA,

@@ -11,25 +11,8 @@
 
 class Drv8301 : public GateDriverBase, public OpAmpBase {
 public:
-    typedef enum : uint32_t {
-        FaultType_NoFault  = (0 << 0),  //!< No fault
-
-        // Status Register 1
-        FaultType_FETLC_OC = (1 << 0),  //!< FET Low side, Phase C Over Current fault
-        FaultType_FETHC_OC = (1 << 1),  //!< FET High side, Phase C Over Current fault
-        FaultType_FETLB_OC = (1 << 2),  //!< FET Low side, Phase B Over Current fault
-        FaultType_FETHB_OC = (1 << 3),  //!< FET High side, Phase B Over Current fault
-        FaultType_FETLA_OC = (1 << 4),  //!< FET Low side, Phase A Over Current fault
-        FaultType_FETHA_OC = (1 << 5),  //!< FET High side, Phase A Over Current fault
-        FaultType_OTW      = (1 << 6),  //!< Over Temperature Warning fault
-        FaultType_OTSD     = (1 << 7),  //!< Over Temperature Shut Down fault
-        FaultType_PVDD_UV  = (1 << 8),  //!< Power supply Vdd Under Voltage fault
-        FaultType_GVDD_UV  = (1 << 9),  //!< DRV8301 Vdd Under Voltage fault
-        FaultType_FAULT    = (1 << 10),
-
-        // Status Register 2
-        FaultType_GVDD_OV  = (1 << 23)  //!< DRV8301 Vdd Over Voltage fault
-    } FaultType_e;
+    // 故障位定义见 Drivers/gate_driver.hpp，与其它驱动器共用同一套位定义。
+    using FaultType_e = GateDriverFault_e;
 
     Drv8301(Stm32SpiArbiter* spi_arbiter, Stm32Gpio ncs_gpio,
             Stm32Gpio enable_gpio, Stm32Gpio nfault_gpio)

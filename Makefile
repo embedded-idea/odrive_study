@@ -53,6 +53,7 @@ ThirdParty/STM32F4xx_HAL_Driver/Src/stm32f4xx_ll_usb.c
 C_SOURCES_BOARD = \
 ThirdParty/FreeRTOS/Source/portable/GCC/ARM_CM4F/port.c \
 Drivers/DRV8301/drv8301.cpp \
+Drivers/EG2134/eg2134.cpp \
 Board/v3/board.cpp \
 Board/v3/Src/main.c \
 Board/v3/Src/stm32f4xx_hal_timebase_TIM.c \
@@ -323,11 +324,11 @@ vpath %.s $(sort $(dir $(ASM_SOURCES)))
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(ASMM_SOURCES:.S=.o)))
 vpath %.S $(sort $(dir $(ASMM_SOURCES)))
 
-$(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR) AUTOHEADERS
 	@echo "ccccccccccccccccccccccccccccc"
 	$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
 
-$(BUILD_DIR)/__%.o: %.cpp Makefile | $(BUILD_DIR) 
+$(BUILD_DIR)/__%.o: %.cpp Makefile | $(BUILD_DIR) AUTOHEADERS
 	@echo "c++++++++++++++++++++++++++++"
 	$(CXX) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.cpp=.lst)) $< -o $@
 
