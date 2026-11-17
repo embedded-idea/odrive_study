@@ -4,9 +4,10 @@
 中央可关闭/可拖动的多标签工作区,底部状态栏。
 """
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtWidgets import (
-    QAction, QLabel, QMainWindow, QMenu, QTabWidget, QToolBar, QToolButton,
+    QAction, QLabel, QMainWindow, QMenu, QStyle, QTabWidget, QToolBar,
+    QToolButton,
 )
 
 from .config_panel import ConfigPanel
@@ -33,7 +34,7 @@ class MainWindow(QMainWindow):
         self.worker = worker
         self.spec_roots = spec_roots
         self.setWindowTitle("OdrvStudio — ODrive v3.6 56V")
-        self.resize(1360, 860)
+        self.resize(1300, 900)
 
         # ---- 中央: 多标签工作区(workAreaTabbedWidget 风格) ----
         self.tabs = QTabWidget()
@@ -70,11 +71,13 @@ class MainWindow(QMainWindow):
     def _build_toolbar(self):
         tb = QToolBar("工具")
         tb.setMovable(False)
+        tb.setIconSize(QSize(20, 20))
         self.addToolBar(Qt.TopToolBarArea, tb)
+        style = self.style()
 
         # 添加设备(菜单: 树形视图 / 表格视图)
         btn_add = QToolButton()
-        btn_add.setText("设备 +")
+        btn_add.setIcon(style.standardIcon(QStyle.SP_DriveHDIcon))
         btn_add.setToolTip("添加设备视图:\n树形视图 — 参数树\n表格视图 — 设备页")
         btn_add.setPopupMode(QToolButton.InstantPopup)
         menu = QMenu(btn_add)
@@ -85,37 +88,47 @@ class MainWindow(QMainWindow):
         btn_add.setMenu(menu)
         tb.addWidget(btn_add)
 
-        act_open = QAction("打开", self)
+        act_open = QAction(style.standardIcon(QStyle.SP_DirOpenIcon),
+                           "打开", self)
         act_open.setToolTip("打开配置快照(JSON)")
         act_open.triggered.connect(self.open_device)
         tb.addAction(act_open)
 
-        act_save = QAction("保存", self)
+        act_save = QAction(style.standardIcon(QStyle.SP_DialogSaveButton),
+                           "保存", self)
         act_save.setToolTip("保存配置快照(JSON)")
         act_save.triggered.connect(self.save_device)
         tb.addAction(act_save)
 
-        act_gen = QAction("生成代码", self)
+        act_gen = QAction(style.standardIcon(QStyle.SP_FileDialogContentsView),
+                          "生成代码", self)
         act_gen.setToolTip("读取设备配置,生成 odrivetool 风格初始化脚本")
         act_gen.triggered.connect(self.generate_code)
         tb.addAction(act_gen)
 
         tb.addSeparator()
 
-        act_console = QAction("命令行交互", self)
+        act_console = QAction(style.standardIcon(QStyle.SP_ComputerIcon),
+                              "命令行交互", self)
         act_console.setToolTip("打开命令行交互标签页")
         act_console.triggered.connect(self.open_console_tool)
         tb.addAction(act_console)
 
         tb.addSeparator()
 
-        act_estop = QAction("急停", self)
-        act_estop.setToolTip("全部轴立即回 IDLE")
-        act_estop.triggered.connect(lambda: self.worker.action_req("estop"))
-        tb.addAction(act_estop)
+        btn_estop = QToolButton()
+        btn_estop.setText("急停")
+        btn_estop.setToolTip("全部轴立即回 IDLE")
+        btn_estop.setStyleSheet(
+            "QToolButton{background:#b71c1c;color:white;font-weight:bold;"
+            "padding:3px 8px;border-radius:3px;}"
+            "QToolButton:hover{background:#d32f2f;}")
+        btn_estop.clicked.connect(lambda: self.worker.action_req("estop"))
+        tb.addWidget(btn_estop)
 
         tb.addSeparator()
-        act_about = QAction("关于", self)
+        act_about = QAction(style.standardIcon(QStyle.SP_MessageBoxInformation),
+                            "关于", self)
         act_about.setToolTip("关于 OdrvStudio")
         act_about.triggered.connect(self._about)
         tb.addAction(act_about)

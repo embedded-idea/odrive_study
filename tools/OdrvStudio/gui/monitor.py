@@ -10,7 +10,7 @@ import time
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
-    QCheckBox, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QLCDNumber,
+    QCheckBox, QFileDialog, QHBoxLayout, QLabel, QLCDNumber,
     QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
@@ -49,7 +49,6 @@ class MonitorWidget(QWidget):
         lay.addWidget(lab)
 
         self.plot = pg.PlotWidget()
-        self.plot.showGrid(x=True, y=True, alpha=0.2)
         self.plot.setLabel("bottom", "时间 [s]")
         self.plot.addLegend(offset=(8, 8), labelTextSize="8pt")
         self.plot.setMouseEnabled(x=True, y=True)
@@ -242,14 +241,14 @@ class DROWidget(QWidget):
             col.setSpacing(1)
             lab = QLabel(name)
             lab.setAlignment(Qt.AlignHCenter)
-            lab.setStyleSheet("color:#8a93a5; font-size:10px;")
+            lab.setStyleSheet("color:#607d8b; font-size:10px;")
             lcd = QLCDNumber()
             lcd.setDigitCount(8)
             lcd.setSegmentStyle(QLCDNumber.Flat)
-            lcd.setMinimumHeight(34)
+            lcd.setMinimumHeight(30)
             lcd.setStyleSheet(
                 "QLCDNumber{color:#ff1744; background:#0a0a0a; "
-                "border:1px solid #263238; border-radius:2px;}")
+                "border:1px solid #90a4ae; border-radius:2px;}")
             col.addWidget(lab)
             col.addWidget(lcd)
             row.addLayout(col, 1)
@@ -258,7 +257,7 @@ class DROWidget(QWidget):
 
         self.lab_small = QLabel("状态 -- | Vbus -- | Ibus --")
         self.lab_small.setAlignment(Qt.AlignHCenter)
-        self.lab_small.setStyleSheet("color:#8a93a5; font-size:11px;")
+        self.lab_small.setStyleSheet("color:#607d8b; font-size:10px;")
         lay.addWidget(self.lab_small)
 
     def set_axis(self, axis):

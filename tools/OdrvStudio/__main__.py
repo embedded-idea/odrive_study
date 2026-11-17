@@ -19,6 +19,22 @@ from OdrvStudio.device_worker import DeviceWorker   # noqa: E402
 from OdrvStudio.spec import load_spec               # noqa: E402
 
 
+def create_app(argv):
+    """QApplication + 全局样式(浅色,贴近 SimpleFOCStudio 的原生观感)。"""
+    from PyQt5.QtWidgets import QApplication
+
+    app = QApplication(argv)
+    app.setStyle("Fusion")
+    app.setApplicationName("OdrvStudio")
+    app.setStyleSheet(
+        "QGroupBox{font-weight:bold; margin-top:10px; padding-top:4px;}"
+        "QGroupBox::title{subcontrol-origin:margin; left:8px;}"
+        "QToolBar{spacing:4px; padding:2px;}"
+        "QToolBar::separator{width:6px;}"
+    )
+    return app
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="OdrvStudio - ODrive PyQt5 调试工作台")
     ap.add_argument("--spec", default=None,
@@ -28,36 +44,9 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     from PyQt5.QtCore import Qt
-    from PyQt5.QtGui import QColor, QPalette
     from PyQt5.QtWidgets import QApplication
 
-    app = QApplication(sys.argv or ["odrvstudio"])
-    app.setStyle("Fusion")
-    app.setApplicationName("OdrvStudio")
-
-    pal = QPalette()
-    BG, BASE, TEXT, DIM = QColor("#1e2127"), QColor("#15171c"), QColor("#d8dce3"), QColor("#8a93a5")
-    pal.setColor(QPalette.Window, BG)
-    pal.setColor(QPalette.WindowText, TEXT)
-    pal.setColor(QPalette.Base, BASE)
-    pal.setColor(QPalette.AlternateBase, QColor("#1a1d23"))
-    pal.setColor(QPalette.Text, TEXT)
-    pal.setColor(QPalette.Button, BG)
-    pal.setColor(QPalette.ButtonText, TEXT)
-    pal.setColor(QPalette.Highlight, QColor("#2f6f9f"))
-    pal.setColor(QPalette.HighlightedText, Qt.white)
-    pal.setColor(QPalette.ToolTipBase, BASE)
-    pal.setColor(QPalette.ToolTipText, TEXT)
-    pal.setColor(QPalette.Disabled, QPalette.Text, DIM)
-    pal.setColor(QPalette.Disabled, QPalette.ButtonText, DIM)
-    app.setPalette(pal)
-    app.setStyleSheet(
-        "QGroupBox{font-weight:bold; border:1px solid #33373f;"
-        "border-radius:4px; margin-top:10px; padding-top:6px;}"
-        "QGroupBox::title{subcontrol-origin:margin; left:8px; color:#8a93a5;}"
-        "QToolBar{spacing:6px; padding:4px;}"
-        "QLineEdit, QDoubleSpinBox, QSpinBox{background:#15171c;}"
-    )
+    app = create_app(sys.argv or ["odrvstudio"])
 
     worker = DeviceWorker(poll_rate=args.poll_rate)
     roots = load_spec(args.spec)

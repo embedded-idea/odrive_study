@@ -53,9 +53,7 @@ class Terminal(QWidget):
         self.out = QPlainTextEdit()
         self.out.setReadOnly(True)
         self.out.setFont(QFont("Consolas, monospace"))
-        self.out.setStyleSheet(
-            "QPlainTextEdit{background:#0d0f13;color:#c8ccd4;"
-            "font-family:Consolas,monospace;font-size:12px;}")
+        self.out.setStyleSheet("QPlainTextEdit{font-family:Consolas,monospace;font-size:12px;}")
         lay.addWidget(self.out, 1)
 
         bar = QHBoxLayout()

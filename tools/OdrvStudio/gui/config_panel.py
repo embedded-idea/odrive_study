@@ -119,8 +119,7 @@ class ConfigPanel(QWidget):
         self.preview = QPlainTextEdit()
         self.preview.setReadOnly(True)
         self.preview.setStyleSheet(
-            "QPlainTextEdit{background:#0d0f13;color:#c8ccd4;"
-            "font-family:Consolas,monospace;font-size:12px;}")
+            "QPlainTextEdit{font-family:Consolas,monospace;font-size:12px;}")
         self.preview.setPlainText(
             "# (空) — 连接设备后点“从设备读取”生成配置脚本")
         bar = QHBoxLayout()

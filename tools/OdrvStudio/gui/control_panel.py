@@ -10,7 +10,7 @@
 """
 
 from PyQt5.QtWidgets import (
-    QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QLabel, QPushButton,
+    QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QPushButton,
 )
 
 MODES = [("速度模式", 2), ("位置模式", 3), ("力矩模式", 1)]
@@ -39,13 +39,11 @@ class ControlLoopBox(_AxisBox):
     def __init__(self, worker, parent=None):
         super().__init__(worker, "控制环模式", parent)
         g = QGridLayout(self)
+        g.setContentsMargins(6, 2, 6, 4)
         self.mode_combo = QComboBox()
         for name, num in MODES:
             self.mode_combo.addItem(name, num)
         g.addWidget(self.mode_combo, 0, 0)
-        lab = QLabel("control_mode")
-        lab.setStyleSheet("color:#8a93a5; font-size:10px;")
-        g.addWidget(lab, 1, 0)
         self.mode_combo.currentIndexChanged.connect(self._on_mode)
 
     def _on_mode(self, idx):
@@ -69,7 +67,8 @@ class GeneralControlsBox(_AxisBox):
     def __init__(self, worker, parent=None):
         super().__init__(worker, "通用控制", parent)
         g = QGridLayout(self)
-        g.setSpacing(4)
+        g.setContentsMargins(6, 2, 6, 4)
+        g.setSpacing(3)
         self.btn_start = QPushButton("进入闭环")
         self.btn_stop = QPushButton("回 IDLE")
         self.btn_estop = QPushButton("⛔ 急停")
@@ -118,49 +117,24 @@ class GeneralControlsBox(_AxisBox):
 
 
 class TorqueBox(_AxisBox):
-    """力矩:input_torque 设定值 + current_lim 限幅。"""
+    """力矩控制:input_torque 设定值(单行,同 SFS 的 Torque Mode)。"""
 
     def __init__(self, worker, parent=None):
         super().__init__(worker, "力矩控制", parent)
         g = QGridLayout(self)
-        g.addWidget(self._label("设定值 [A]"), 0, 0)
+        g.setContentsMargins(6, 2, 6, 4)
         self.torque_spin = QDoubleSpinBox()
         self.torque_spin.setRange(-50.0, 50.0)
         self.torque_spin.setDecimals(3)
         self.torque_spin.setSingleStep(0.05)
-        g.addWidget(self.torque_spin, 0, 1)
+        g.addWidget(self.torque_spin, 0, 0)
         self.btn_torque = QPushButton("发送")
         self.btn_torque.clicked.connect(self._send_torque)
-        g.addWidget(self.btn_torque, 0, 2)
-        g.addWidget(self._label("电流限幅 [A]"), 1, 0)
-        self.lim_spin = QDoubleSpinBox()
-        self.lim_spin.setRange(0.0, 120.0)
-        self.lim_spin.setDecimals(1)
-        self.lim_spin.setSingleStep(1.0)
-        g.addWidget(self.lim_spin, 1, 1)
-        self.btn_lim = QPushButton("写入")
-        self.btn_lim.clicked.connect(self._write_lim)
-        g.addWidget(self.btn_lim, 1, 2)
-
-    @staticmethod
-    def _label(text):
-        from PyQt5.QtWidgets import QLabel
-        lab = QLabel(text)
-        lab.setStyleSheet("color:#8a93a5; font-size:11px;")
-        return lab
+        g.addWidget(self.btn_torque, 0, 1)
 
     def _send_torque(self):
         self.worker.write_req(self._p("controller.input_torque"),
                               self.torque_spin.value())
-
-    def _write_lim(self):
-        self.worker.write_req(self._p("controller.config.current_lim"),
-                              self.lim_spin.value())
-
-    def update_state(self, snap):
-        lim = snap.get(self._p("controller.config.current_lim"))
-        if isinstance(lim, (int, float)) and lim > 0:
-            self.lim_spin.setValue(float(lim))
 
 
 class JogControlBox(_AxisBox):
@@ -169,6 +143,7 @@ class JogControlBox(_AxisBox):
     def __init__(self, worker, parent=None):
         super().__init__(worker, "点动 / 设定值", parent)
         g = QGridLayout(self)
+        g.setContentsMargins(6, 2, 6, 4)
         g.setVerticalSpacing(3)
         self.vel_spin = QDoubleSpinBox()
         self.vel_spin.setRange(-100.0, 100.0)

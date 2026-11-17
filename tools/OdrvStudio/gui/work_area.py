@@ -7,8 +7,8 @@
 
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
-    QComboBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QPushButton,
-    QSpinBox, QSplitter, QVBoxLayout, QWidget,
+    QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
+    QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget,
 )
 
 from .control_panel import ControlLoopBox, GeneralControlsBox, JogControlBox, TorqueBox
@@ -18,38 +18,34 @@ from .terminal import Terminal
 
 
 class ConnectionControlBox(QGroupBox):
-    """连接控制:状态灯 + 连接/断开 + 轮询率 + 轴选择。"""
+    """连接控制:状态灯 + 连接/断开 + 轮询率 + 轴选择(紧凑,同 SFS 单行风格)。"""
 
     def __init__(self, worker, parent=None):
         super().__init__("连接控制", parent)
         self.worker = worker
         g = QGridLayout(self)
+        g.setContentsMargins(6, 2, 6, 4)
+        g.setHorizontalSpacing(6)
         self.led = QLabel("●")
-        self.led.setStyleSheet("color:#666; font-size:16px;")
+        self.led.setStyleSheet("color:#666; font-size:15px;")
         self.btn_connect = QPushButton("连接")
         self.btn_connect.clicked.connect(self._toggle)
-        self.lab_status = QLabel("未连接")
-        self.lab_status.setStyleSheet("color:#8a93a5;")
         g.addWidget(self.led, 0, 0)
         g.addWidget(self.btn_connect, 0, 1)
-        g.addWidget(self.lab_status, 0, 2)
-
-        lab = QLabel("轮询 [Hz]")
-        lab.setStyleSheet("color:#8a93a5; font-size:11px;")
-        g.addWidget(lab, 1, 0)
         self.spin_rate = QSpinBox()
         self.spin_rate.setRange(2, 100)
         self.spin_rate.setValue(worker.poll_rate)
+        self.spin_rate.setSuffix(" Hz")
+        self.spin_rate.setToolTip("轮询频率")
         self.spin_rate.valueChanged.connect(self._on_rate)
-        g.addWidget(self.spin_rate, 1, 1)
-
-        lab = QLabel("轴")
-        lab.setStyleSheet("color:#8a93a5; font-size:11px;")
-        g.addWidget(lab, 2, 0)
+        g.addWidget(self.spin_rate, 0, 2)
         self.axis_combo = QComboBox()
         self.axis_combo.currentIndexChanged.connect(self._on_axis_changed)
-        g.addWidget(self.axis_combo, 2, 1, 1, 2)
-        g.setColumnStretch(2, 1)
+        g.addWidget(self.axis_combo, 0, 3, 1, 2)
+        g.setColumnStretch(4, 1)
+        self.lab_status = QLabel("未连接")
+        self.lab_status.setStyleSheet("color:#8a93a5; font-size:10px;")
+        g.addWidget(self.lab_status, 1, 0, 1, 5)
 
     def _toggle(self):
         if self.worker.connected:
@@ -93,18 +89,45 @@ class ConnectionControlBox(QGroupBox):
 
 
 class GeneralSettingsBox(QGroupBox):
-    """通用设置:曲线清空 / 导出 CSV。"""
+    """通用设置(General device settings):电流限幅 + 曲线清空/导出 CSV。"""
 
-    def __init__(self, monitor, parent=None):
+    def __init__(self, worker, monitor, parent=None):
         super().__init__("通用设置", parent)
+        self.worker = worker
         self.monitor = monitor
+        self.axis = 0
         g = QGridLayout(self)
+        g.setContentsMargins(6, 2, 6, 4)
+        g.setVerticalSpacing(3)
+        lab = QLabel("电流限幅 [A]")
+        lab.setStyleSheet("color:#607d8b; font-size:11px;")
+        g.addWidget(lab, 0, 0)
+        self.lim_spin = QDoubleSpinBox()
+        self.lim_spin.setRange(0.0, 120.0)
+        self.lim_spin.setDecimals(1)
+        self.lim_spin.setSingleStep(1.0)
+        g.addWidget(self.lim_spin, 0, 1)
+        self.btn_lim = QPushButton("写入")
+        self.btn_lim.clicked.connect(self._write_lim)
+        g.addWidget(self.btn_lim, 0, 2)
         self.btn_clear = QPushButton("清空曲线")
         self.btn_csv = QPushButton("导出 CSV")
-        g.addWidget(self.btn_clear, 0, 0)
-        g.addWidget(self.btn_csv, 0, 1)
+        g.addWidget(self.btn_clear, 1, 0)
+        g.addWidget(self.btn_csv, 1, 1)
         self.btn_clear.clicked.connect(monitor.clear)
         self.btn_csv.clicked.connect(monitor._export_csv)
+
+    def _write_lim(self):
+        self.worker.write_req("axis%d.controller.config.current_lim" % self.axis,
+                              self.lim_spin.value())
+
+    def update_state(self, snap):
+        lim = snap.get("axis%d.controller.config.current_lim" % self.axis)
+        if isinstance(lim, (int, float)) and lim > 0:
+            self.lim_spin.setValue(float(lim))
+
+    def set_axis(self, axis):
+        self.axis = axis
 
 
 class WorkArea(QWidget):
@@ -165,7 +188,7 @@ class WorkArea(QWidget):
         c2.setContentsMargins(0, 0, 0, 0)
         c2.setSpacing(4)
         self.general = GeneralControlsBox(worker)
-        self.settings = GeneralSettingsBox(self.monitor)
+        self.settings = GeneralSettingsBox(worker, self.monitor)
         c2.addWidget(self.general)
         c2.addWidget(self.settings)
         c2.addStretch(1)
@@ -185,7 +208,7 @@ class WorkArea(QWidget):
         split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
         split.setStretchFactor(2, 0)
-        split.setSizes([150, 430, 330])
+        split.setSizes([100, 520, 310])
 
         self.conn.axis_combo.currentIndexChanged.connect(self._on_axis_changed)
 
@@ -205,6 +228,7 @@ class WorkArea(QWidget):
         self.torque.set_axis(axis)
         self.pid.set_axis(axis)
         self.jog.set_axis(axis)
+        self.settings.set_axis(axis)
         self.axisChanged.emit(axis)
 
     @property
@@ -231,6 +255,6 @@ class WorkArea(QWidget):
     def update_state(self, snap):
         self.dro.update_state(snap)
         self.loop.update_state(snap)
-        self.torque.update_state(snap)
         self.general.update_state(snap)
+        self.settings.update_state(snap)
         self.monitor.update_data(self.worker.hist, self.monitor.btn_pause.isChecked())
