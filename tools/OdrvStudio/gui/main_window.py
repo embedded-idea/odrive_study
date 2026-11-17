@@ -5,9 +5,10 @@
 """
 
 from PyQt5.QtCore import Qt, QTimer, QSize
+from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
-    QAction, QLabel, QMainWindow, QMenu, QStyle, QTabWidget, QToolBar,
-    QToolButton,
+    QAction, QLabel, QMainWindow, QMenu, QShortcut, QStyle, QTabWidget,
+    QToolBar, QToolButton,
 )
 
 from .config_panel import ConfigPanel
@@ -58,9 +59,18 @@ class MainWindow(QMainWindow):
         # ---- 状态栏 ----
         self.lab_fw = QLabel("")
         self.lab_err = QLabel("")
+        self.lab_keys = QLabel("  急停: Ctrl+. / Ctrl+Shift+E  ")
+        self.lab_keys.setStyleSheet("color:#b71c1c;")
         sb = self.statusBar()
         sb.addWidget(self.lab_fw)
         sb.addPermanentWidget(self.lab_err)
+        sb.addPermanentWidget(self.lab_keys)
+
+        # ---- 全局急停快捷键(窗口聚焦即生效,优先于控件) ----
+        for key in ("Ctrl+.", "Ctrl+Shift+E"):
+            sc = QShortcut(QKeySequence(key), self)
+            sc.activated.connect(
+                lambda: self.worker.action_req("estop"))
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._on_timer)
@@ -118,7 +128,7 @@ class MainWindow(QMainWindow):
 
         btn_estop = QToolButton()
         btn_estop.setText("急停")
-        btn_estop.setToolTip("全部轴立即回 IDLE")
+        btn_estop.setToolTip("全部轴立即回 IDLE(快捷键 Ctrl+. 或 Ctrl+Shift+E)")
         btn_estop.setStyleSheet(
             "QToolButton{background:#b71c1c;color:white;font-weight:bold;"
             "padding:3px 8px;border-radius:3px;}"
@@ -233,6 +243,9 @@ class MainWindow(QMainWindow):
                 self.work.set_connected(False, "未连接(%s)" % ev[1])
                 self.work.set_axes(self.worker.axes)
             self.lab_fw.setText("")
+        elif kind == "reconnecting":
+            if self.work is not None:
+                self.work.set_reconnecting(ev[1])
         elif kind == "log":
             self.statusBar().showMessage(ev[1], 5000)
         elif kind == "wr_done":

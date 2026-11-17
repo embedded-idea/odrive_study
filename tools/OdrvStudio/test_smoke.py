@@ -1,13 +1,15 @@
 """OdrvStudio 集成冒烟测试(离屏 + 假设备,不需要真硬件)。
 
 假设备实现 odrive fibre 属性树:全部规格叶子可读,写入被记录,
-save_configuration/reboot 被记录。覆盖:连接/双轴探测/轮询、轴切换、
-配置读取→代码生成、快照保存/加载/应用(跨轴映射)、CSV 导出、急停。
+save_configuration/reboot 被记录。覆盖:连接/双轴探测/轮询(含积分器)、
+轴切换、配置读取→代码生成、快照保存/加载/应用(跨轴映射)、CSV 导出、
+急停、连续录制、掉线自动重连、危险写入识别。
 """
 import json
 import os
 import sys
 import tempfile
+import time
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -73,6 +75,7 @@ odrive.find_sync = lambda timeout=6: FakeNode(fake)
 tmpdir = tempfile.mkdtemp(prefix="odrvstudio_test_")
 snap_path = os.path.join(tmpdir, "snapshot.json")
 csv_path = os.path.join(tmpdir, "monitor.csv")
+rec_path = os.path.join(tmpdir, "record.csv")
 
 app = QApplication([])
 worker = DeviceWorker(poll_rate=20)
@@ -149,10 +152,28 @@ def stage3():
     check(os.path.exists(csv_path) and os.path.getsize(csv_path) > 50, "csv exported")
     with open(csv_path) as f:
         header = f.readline().strip()
-    check("vel_a0" in header and "vel_a1" in header, "csv columns: %s" % header)
+    check("vel_a0" in header and "vel_a1" in header and "vel_int_a0" in header,
+          "csv columns: %s" % header)
+    # 积分器曲线(hist 行 8 列 + 曲线已注册)
+    r = worker.hist[0][0]
+    check(len(r) == 8, "hist row has 8 cols incl vel_int")
+    check(any(k.endswith("vel_int") for k in win.work.monitor.curves),
+          "vel_int curves registered")
+    # 连续录制
+    worker.record_req(rec_path)
     # 命令行(设备页内嵌 + 独立“命令行交互”标签),结果异步,stage4 验证
     win.work.terminal._exec("get axis1.encoder.pos_estimate")
     win.console._exec("get axis0.vbus_voltage")
+    # 危险写入识别
+    from OdrvStudio.gui.param_tree import ParamTree
+    check(ParamTree.is_dangerous("axis0.controller.config.vel_gain") and
+          ParamTree.is_dangerous("axis0.motor.config.calibration_current") and
+          not ParamTree.is_dangerous("axis0.encoder.pos_estimate"),
+          "dangerous write detection")
+    # 模拟掉线 → 自动重连(run 循环按 _reconnect_due 尝试)
+    worker._on_lost("模拟掉线")
+    check(not worker.connected, "device lost detected")
+    worker._reconnect_due = time.monotonic()   # 立即尝试
     # 关闭标签页(workAreaTabbedWidget 行为)
     idx_form = win.tabs.indexOf(win.work)
     win.tabs.tabCloseRequested.emit(idx_form)
@@ -163,6 +184,22 @@ def stage3():
 
 
 def stage4():
+    # 自动重连成功(按序列号匹配,曲线缓冲保留)
+    check(worker.connected, "auto-reconnected")
+    check(worker.axes == [0, 1], "axes restored: %s" % worker.axes)
+    check(len(worker.hist.get(0, [])) > 0, "hist preserved across reconnect")
+    # 录制:停止后文件有表头 + 行
+    worker.record_stop_req()
+    worker._rec_close()          # 确保落盘(即使事件尚未处理)
+    time.sleep(0.05)
+    ok_rec = os.path.exists(rec_path)
+    if ok_rec:
+        with open(rec_path) as f:
+            lines = f.read().strip().splitlines()
+    check(ok_rec and len(lines) > 5 and lines[0].startswith("t,"),
+          "recording file: %d lines" % (len(lines) if ok_rec else 0))
+    check(win.work.settings.btn_rec.text() == "停止录制" or
+          win.work.settings._recording is False, "rec button state")
     check("axis1.encoder.pos_estimate" in win.work.terminal.out.toPlainText(),
           "device-page terminal axis1 get")
     check("vbus_voltage" in win.console.out.toPlainText(),

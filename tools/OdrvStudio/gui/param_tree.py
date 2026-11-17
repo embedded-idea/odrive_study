@@ -1,13 +1,15 @@
 """OdrvStudio - 设备参数树。
 
 参考 SimpleFOCStudio 的 deviceTreeview:规格驱动的树形浏览,
-按需读取、双击写入(仅 rw 属性)。
+按需读取、双击写入(仅 rw 属性);关键配置写入前二次确认。
 """
+
+import re
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QInputDialog, QLineEdit, QPushButton, QTreeWidget, QTreeWidgetItem,
-    QVBoxLayout, QWidget,
+    QInputDialog, QLineEdit, QMessageBox, QPushButton, QTreeWidget,
+    QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from ..spec import decode_bits
@@ -15,6 +17,13 @@ from ..spec import decode_bits
 COL_NAME, COL_TYPE, COL_UNIT, COL_VALUE = 0, 1, 2, 3
 ROLE_NODE = Qt.UserRole
 BATCH = 40
+
+# 写入前需要二次确认的路径特征(关键配置,误写可能导致失控或需重新标定)
+DANGEROUS_RE = re.compile(
+    r"\.config\.|current_lim|vel_limit|_calibrat|calibration"
+    r"|pole_pairs|steps_per|torque_constant|resistance|inductance"
+    r"|flux_linkage|motor_type|watchdog|trap_traj|control_mode",
+    re.IGNORECASE)
 
 
 def fmt_value(v):
@@ -196,6 +205,19 @@ class ParamTree(QWidget):
 
     # ---- 写入 ----
 
+    @staticmethod
+    def is_dangerous(path):
+        return bool(DANGEROUS_RE.search(path))
+
+    def _confirm(self, node, new_text, cur_text):
+        ret = QMessageBox.question(
+            self, "确认写入关键配置",
+            "路径: %s\n当前值: %s\n新值: %s\n\n"
+            "这是关键配置,写错可能导致电机失控或需要重新标定。\n确认写入?"
+            % (node.path, cur_text, new_text),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        return ret == QMessageBox.Yes
+
     def _on_dbl(self, item, col):
         if col != COL_VALUE:
             return
@@ -210,6 +232,8 @@ class ParamTree(QWidget):
             QLineEdit.Normal, "" if cur.startswith("<") else cur)
         if not ok:
             return
+        if self.is_dangerous(node.path) and not self._confirm(node, text, cur):
+            return
         self.worker.write_req(node.path, parse_value(text))
 
     def _on_changed(self, item, col):
@@ -218,4 +242,8 @@ class ParamTree(QWidget):
         node = item.data(COL_NAME, ROLE_NODE)
         if node is None or not node.writable:
             return
-        self.worker.write_req(node.path, parse_value(item.text(COL_VALUE)))
+        text = item.text(COL_VALUE)
+        if self.is_dangerous(node.path) and not self._confirm(
+                node, text, item.text(COL_VALUE)):
+            return
+        self.worker.write_req(node.path, parse_value(text))

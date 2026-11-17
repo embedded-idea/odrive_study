@@ -45,8 +45,9 @@ WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
   位置/速度/Iq/目标,目标值按控制模式自动取 input_vel/input_pos/input_torque;
   下方小字显示 状态/Vbus/Ibus
 - **曲线**:单块黑色大图(pyqtgraph),图例内嵌;图下控制行:停止(当前轴)、
-  暂停、View all(缩放复位)、目标/速度/位置/电流 显隐复选框、
-  Downsample(每条曲线最多绘制点数,默认 500,抽稀降负载)
+  暂停、View all(缩放复位)、目标/速度/位置/电流/积分 显隐复选框、
+  Downsample(每条曲线最多绘制点数,默认 500,抽稀降负载)。
+  “积分”是 `controller.vel_integrator_value`(调速环必备,看饱和/发散)
 - **控制环模式**:下拉框选择 速度/位置/力矩(写 control_mode);进入闭环/回 IDLE
   在“通用控制”里(同 SFS 的 Disable Device)
 - **PID 控制器配置**:选择环(速度环/位置环)下拉切换参数行,每行 读/写 +
@@ -57,17 +58,28 @@ WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 - **生成代码**:读取设备配置 → odrivetool 风格初始化脚本标签页
 - **命令行交互**:独立的全功能终端标签页(设备页第三行还内嵌了一个精简终端)
 
+## 可靠性 / 安全(ODrive 特有)
+
+- **掉线自动重连**:USB 掉线(如 WSL 下 save 后 usbipd 分离)后按序列号
+  自动重连,曲线缓冲无缝保留;“连接控制”里可关;手动断开不触发
+- **全局急停快捷键**:`Ctrl+.` 或 `Ctrl+Shift+E`(窗口聚焦即生效,
+  状态栏右侧有提示),全部轴立即回 IDLE
+- **危险写入二次确认**:参数树写入 `.config.*`、限幅、标定、极对数等
+  关键路径前弹窗确认(显示当前值/新值)
+- **连续录制**:通用设置“开始录制”边采边写 CSV(按轮询频率落盘,
+  不受 60 s 曲线缓冲限制);断线时暂停、重连后继续写同一文件
+
 ## 功能(对照 SimpleFOCStudio)
 
 | 模块 | 对应 SimpleFOCStudio-zh | 说明 |
 |---|---|---|
-| 连接控制 | connectionControl | 设备页第一行:状态灯 / 连接断开 / 轮询频率 / 轴选择 |
+| 连接控制 | connectionControl | 设备页第一行:状态灯 / 连接断开 / 轮询频率 / 轴选择 / 自动重连 |
 | DRO 数码管 | droDisplayWidget | 位置/速度/Iq/目标 四个七段数码管 + 状态/Vbus/Ibus 小字;目标随控制模式自动切换 |
-| 实时曲线 | graphicWidget | 单块黑色图 + 图例:目标/速度/位置/电流 + Vbus/Ibus 虚线;**双轴同屏对比**;停止/暂停/View all/曲线显隐/Downsample |
+| 实时曲线 | graphicWidget | 单块黑色图 + 图例:目标/速度/位置/电流/积分器 + Vbus/Ibus 虚线;**双轴同屏对比**;停止/暂停/View all/曲线显隐/Downsample |
 | 控制环模式 + 力矩 | controlLoopConfig / torqueConfig | 模式下拉(速度/位置/力矩)、input_torque 设定、current_lim 限幅 |
 | 点动 / 设定值 | deviceJoggingControl | 速度设定+快捷档位、点动(按住生效)、位置绝对/相对 |
 | 通用控制 | generalControls | 进入闭环/回 IDLE、电机/编码器标定、保存配置、清除错误、全轴急停 |
-| 通用设置 | generalSettingsWidget | 曲线清空/导出 CSV |
+| 通用设置 | generalSettingsWidget | 电流限幅、曲线清空/导出 CSV、连续录制(边采边写) |
 | PID 调参 | pidConfiguration | vel_gain / vel_integrator_gain / pos_gain / vel_limit / vel_ramp_rate 单项或批量读写,速度阶跃测试并绘制 setpoint 与实际响应 |
 | 设备(树形视图) | treeViewConfigTool | 解析固件仓库的 `odrive-interface.yaml`(约 680 个可读属性),惰性加载、按名过滤、双击写入(仅 rw),错误位自动翻译 |
 | 生成代码 | generatedCodeDisplay | 读当前配置生成 odrivetool 风格 Python 初始化脚本(带单位/说明注释),可复制或导出 .py |
@@ -104,5 +116,7 @@ USB 卡顿时界面不冻结。设备层常量(错误码表等)在 `OdrvStudio/d
 - 参数树 / 配置面板的写操作直接作用于设备属性;写 `config.*` 后需 `save` 才掉电保存,
   `save` 会重启设备(WSL 下需重新 `usbipd attach`)。
 - 监控曲线数据保存在后台线程的环形缓冲(默认 60 s),暂停只影响显示;
-  “导出 CSV”输出各轴速度/位置/Iq 及母线电压电流。
+  “导出 CSV”输出各轴速度/位置/Iq/积分器及母线电压电流;
+  需要完整记录时用“开始录制”(直接落盘,无时长限制)
 - 配置快照 JSON 包含固件版本与序列号,加载时会显示来源,应用前请核对。
+  自动重连同样按序列号匹配,换板子后请手动断开再连接

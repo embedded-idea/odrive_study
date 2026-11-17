@@ -16,13 +16,15 @@ from PyQt5.QtWidgets import (
 
 pg.setConfigOptions(antialias=False, background="#000000", foreground="#c8ccd4")
 
-# 每轴一组颜色: vel_set(目标) / vel(速度) / pos(位置) / iq(电流)
+# 每轴一组颜色: vel_set(目标) / vel(速度) / pos(位置) / iq(电流) / vel_int(积分器)
 AXIS_COLORS = {
-    0: {"vel_set": "#ef5350", "vel": "#66bb6a", "pos": "#26c6da", "iq": "#ffee58"},
-    1: {"vel_set": "#ff7043", "vel": "#ab47bc", "pos": "#42a5f5", "iq": "#ec407a"},
+    0: {"vel_set": "#ef5350", "vel": "#66bb6a", "pos": "#26c6da",
+        "iq": "#ffee58", "vel_int": "#ba68c8"},
+    1: {"vel_set": "#ff7043", "vel": "#ab47bc", "pos": "#42a5f5",
+        "iq": "#ec407a", "vel_int": "#ffb74d"},
 }
 COMMON_COLORS = {"vbus": "#fff176", "ibus": "#a1887f"}
-ROW_NAMES = ("vel", "vel_set", "pos", "iq", "vbus", "ibus")
+ROW_NAMES = ("vel", "vel_set", "pos", "iq", "vel_int", "vbus", "ibus")
 
 # 曲线分组(复选框显隐): key -> 字段
 CURVE_GROUPS = [
@@ -30,6 +32,7 @@ CURVE_GROUPS = [
     ("速度", "vel"),
     ("位置", "pos"),
     ("电流", "iq"),
+    ("积分", "vel_int"),
 ]
 
 
@@ -121,6 +124,9 @@ class MonitorWidget(QWidget):
                 pg.mkPen(color["pos"], width=1.4, style=Qt.DashLine), "位置" + label)
             reg(base + "iq", ("axis", a, "iq"),
                 pg.mkPen(color["iq"], width=1.2), "电流" + label)
+            reg(base + "vel_int", ("axis", a, "vel_int"),
+                pg.mkPen(color["vel_int"], width=1.0, style=Qt.DotLine),
+                "积分" + label)
         for name in ("vbus", "ibus"):
             reg(name, ("common", name),
                 pg.mkPen(COMMON_COLORS[name], width=1.0, style=Qt.DotLine), name)
@@ -152,7 +158,7 @@ class MonitorWidget(QWidget):
         base = self._axes[0]
         cols = ["t"]
         for a in self._axes:
-            cols += ["vel_a%d" % a, "vel_set_a%d" % a, "pos_a%d" % a, "iq_a%d" % a]
+            cols += ["%s_a%d" % (k, a) for k in ("vel", "vel_set", "pos", "iq", "vel_int")]
         cols += ["vbus", "ibus"]
         n = max((len(hist.get(a, [])) for a in self._axes), default=0)
         with open(path, "w", encoding="utf-8") as f:
@@ -162,11 +168,10 @@ class MonitorWidget(QWidget):
                 for a in self._axes:
                     h = hist.get(a, [])
                     r = h[i] if i < len(h) else None
-                    row += ([_csv_num(r[1]), _csv_num(r[2]),
-                             _csv_num(r[3]), _csv_num(r[4])] if r else [""] * 4)
+                    row += ([_csv_num(r[j]) for j in range(1, 6)] if r else [""] * 5)
                 hb = hist.get(base, [])
                 rb = hb[i] if i < len(hb) else None
-                row += ([_csv_num(rb[5]), _csv_num(rb[6])] if rb else ["", ""])
+                row += ([_csv_num(rb[6]), _csv_num(rb[7])] if rb else ["", ""])
                 f.write(",".join(row) + "\n")
 
     def clear(self):
@@ -196,7 +201,7 @@ class MonitorWidget(QWidget):
         ts_c = []
         for row in hist[any_axis]:
             ts_c.append(row[0] - t0_c)
-            for i, n in zip((5, 6), ("vbus", "ibus")):
+            for i, n in zip((6, 7), ("vbus", "ibus")):
                 v = row[i]
                 common[n].append(v if isinstance(v, (int, float)) else 0.0)
 

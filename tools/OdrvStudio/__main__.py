@@ -43,7 +43,6 @@ def main(argv=None):
                     help="监控轮询频率 Hz(默认 20)")
     args = ap.parse_args(argv)
 
-    from PyQt5.QtCore import Qt
     from PyQt5.QtWidgets import QApplication
 
     app = create_app(sys.argv or ["odrvstudio"])

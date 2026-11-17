@@ -13,8 +13,17 @@ import odrive
 
 from .device import AXIS_STATE
 
-HIST_FIELDS = ("t", "vel", "vel_set", "pos", "iq", "vbus", "ibus")
+# 曲线字段: hist 行 = (t, vel, vel_set, pos, iq, vel_int, vbus, ibus)
+HIST_PATHS = {
+    "vel": "encoder.vel_estimate",
+    "vel_set": "controller.vel_setpoint",
+    "pos": "encoder.pos_estimate",
+    "iq": "motor.current_control.Iq_measured",
+    "vel_int": "controller.vel_integrator_value",
+}
+HIST_FIELDS = ("t",) + tuple(HIST_PATHS) + ("vbus", "ibus")
 HIST_WINDOW_S = 60
+RECONNECT_DELAY_S = 2.0
 
 COMMON_FAST = ["vbus_voltage", "ibus"]
 COMMON_SLOW = [
@@ -35,6 +44,7 @@ def _axis_paths(a):
         "axis%d.controller.vel_setpoint" % a,
         "axis%d.encoder.pos_estimate" % a,
         "axis%d.motor.current_control.Iq_measured" % a,
+        "axis%d.controller.vel_integrator_value" % a,   # 旧固件可能没有,见 _poll
     ]
     slow = [
         "axis%d.error" % a,
@@ -72,10 +82,22 @@ class DeviceWorker(threading.Thread):
         self.last_error = ""
         self.axes = [0]          # 连接后探测:单轴 [0] / 双轴 [0, 1]
         self.snapshot = {}       # path -> value (None = 读取失败)
-        self.hist = {}           # axis -> deque[(t, vel, vel_set, pos, iq, vbus, ibus)]
+        self.hist = {}           # axis -> deque[(t, vel, vel_set, pos, iq, vel_int, vbus, ibus)]
         self.tick = 0
         self._fast_paths = []
         self._slow_paths = []
+
+        # 掉线自动重连(按序列号匹配;手动断开不触发)
+        self.auto_reconnect = True
+        self.serial_number = None
+        self._reconnect_wanted = False
+        self._reconnect_due = 0.0
+        self._reconnect_attempt = 0
+
+        # 连续录制(边采边写 CSV)
+        self.recording = False
+        self._rec = None
+        self._rec_count = 0
 
     # ---------- GUI 侧接口 ----------
 
@@ -113,6 +135,16 @@ class DeviceWorker(threading.Thread):
     def action_req(self, name, arg=None):
         self.post("action", name, arg)
 
+    def record_req(self, path):
+        """开始连续录制(边采边写 CSV,断线暂停、重连续写)。"""
+        self.post("record_start", path)
+
+    def record_stop_req(self):
+        self.post("record_stop")
+
+    def set_auto_reconnect(self, on):
+        self.post("set_auto_reconnect", bool(on))
+
     def stop(self):
         self._stop_evt.set()
 
@@ -131,11 +163,15 @@ class DeviceWorker(threading.Thread):
                     self._poll()
                 except Exception as e:  # 设备掉线等
                     self._on_lost("%s: %s" % (type(e).__name__, e))
+            elif (self._reconnect_wanted and not self.connecting
+                  and time.monotonic() >= self._reconnect_due):
+                self._try_reconnect()
             now = time.monotonic()
             if now < next_t:
                 time.sleep(min(next_t - now, 0.1))
             next_t = max(next_t + interval, time.monotonic())
         self._dev_close()
+        self._rec_close()
 
     def _handle_cmds(self):
         while True:
@@ -155,16 +191,26 @@ class DeviceWorker(threading.Thread):
                     self._do_rd(cmd[1], cmd[2])
                 elif kind == "action":
                     self._do_action(cmd[1], cmd[2])
+                elif kind == "record_start":
+                    self._do_record_start(cmd[1])
+                elif kind == "record_stop":
+                    self._do_record_stop()
+                elif kind == "set_auto_reconnect":
+                    self.auto_reconnect = cmd[1]
+                    if not cmd[1]:
+                        self._reconnect_wanted = False
             except Exception as e:
                 self._emit("log", "[err] %s: %s" % (type(e).__name__, e))
 
     # ---- 连接管理 ----
 
-    def _do_connect(self, timeout=6):
+    def _do_connect(self, timeout=6, expect_serial=None):
         if self.connected:
-            return
+            return True
         self.connecting = True
-        self._emit("connecting")
+        quiet = expect_serial is not None   # 自动重连尝试不打扰状态栏
+        if not quiet:
+            self._emit("connecting")
         try:
             raw = odrive.find_sync(timeout=timeout)
             self.dev = _DeviceAdapter(raw)
@@ -173,15 +219,40 @@ class DeviceWorker(threading.Thread):
             self.connected = True
             self.last_error = ""
             self.snapshot = {}
-            self.hist = {a: deque(maxlen=max(60, int(self.poll_rate * HIST_WINDOW_S)))
-                         for a in self.axes}
-            self._emit("connected", list(self.axes))
+            if self.hist:   # 重连:保留曲线缓冲
+                for a in list(self.hist):
+                    if a not in self.axes:
+                        del self.hist[a]
+                for a in self.axes:
+                    self.hist.setdefault(
+                        a, deque(maxlen=max(60, int(self.poll_rate * HIST_WINDOW_S))))
+            else:
+                self.hist = {a: deque(maxlen=max(60, int(self.poll_rate * HIST_WINDOW_S)))
+                             for a in self.axes}
             self._poll_slow()   # 连上立刻刷一遍慢路径
+            serial = self.snapshot.get("serial_number")
+            if expect_serial is not None and serial != expect_serial:
+                self._dev_close()
+                self.connected = False
+                self.axes = [0]
+                self.snapshot = {}
+                self._emit("log", "[重连] 发现序列号不同的设备(%s),继续等待 %s"
+                           % (serial, expect_serial))
+                return False
+            self.serial_number = serial
+            self._reconnect_wanted = False
+            self._reconnect_attempt = 0
+            self._emit("connected", list(self.axes))
+            return True
         except Exception as e:
             self.dev = None
             self.axes = [0]
             self.last_error = _friendly_err(e)
-            self._emit("connect_failed", self.last_error)
+            if quiet:
+                self._emit("log", "[重连] 等待设备中(%s)" % self.last_error)
+            else:
+                self._emit("connect_failed", self.last_error)
+            return False
         finally:
             self.connecting = False
 
@@ -215,10 +286,20 @@ class DeviceWorker(threading.Thread):
     def _on_lost(self, reason):
         self._dev_close()
         self.connected = False
-        self.axes = [0]
         self.snapshot = {}
-        self.hist = {}
         self._emit("disconnected", reason)
+        if self.auto_reconnect and self.serial_number:
+            self._reconnect_wanted = True
+            self._reconnect_due = time.monotonic() + 1.0
+            self._reconnect_attempt = 0
+            self._emit("reconnecting", 0)
+        # hist/axes 保留:重连成功后曲线无缝继续
+
+    def _try_reconnect(self):
+        self._reconnect_attempt += 1
+        self._reconnect_due = time.monotonic() + RECONNECT_DELAY_S
+        self._emit("reconnecting", self._reconnect_attempt)
+        self._do_connect(timeout=0.5, expect_serial=self.serial_number)
 
     def _dev_close(self):
         if self.dev is not None:
@@ -232,20 +313,30 @@ class DeviceWorker(threading.Thread):
 
     def _poll(self):
         d = self.dev
+        failed_opt = []
         for p in self._fast_paths:
-            self.snapshot[p] = d.rd(p)
+            try:
+                self.snapshot[p] = d.rd(p)
+            except Exception:
+                if p.endswith(HIST_PATHS["vel_int"]):
+                    # 旧固件没有该属性:记 None 并从轮询列表剔除
+                    self.snapshot[p] = None
+                    failed_opt.append(p)
+                else:
+                    raise
+        if failed_opt:
+            self._fast_paths = [p for p in self._fast_paths if p not in failed_opt]
         if self.tick % max(1, self.poll_rate) == 0:
             self._poll_slow()
+        t = time.time()
         for a in self.axes:
-            self.hist[a].append((
-                time.time(),
-                self.snapshot.get("axis%d.encoder.vel_estimate" % a),
-                self.snapshot.get("axis%d.controller.vel_setpoint" % a),
-                self.snapshot.get("axis%d.encoder.pos_estimate" % a),
-                self.snapshot.get("axis%d.motor.current_control.Iq_measured" % a),
-                self.snapshot.get("vbus_voltage"),
-                self.snapshot.get("ibus"),
-            ))
+            row = [t]
+            row += [self.snapshot.get("axis%d.%s" % (a, p))
+                    for p in HIST_PATHS.values()]
+            row += [self.snapshot.get("vbus_voltage"), self.snapshot.get("ibus")]
+            self.hist[a].append(tuple(row))
+        if self._rec is not None:
+            self._rec_write(t)
         self.tick += 1
 
     def _poll_slow(self):
@@ -254,6 +345,71 @@ class DeviceWorker(threading.Thread):
                 self.snapshot[p] = self.dev.rd(p)
             except Exception:
                 self.snapshot[p] = None
+
+    # ---- 连续录制 ----
+
+    @staticmethod
+    def _rec_header(axes):
+        cols = ["t"]
+        for a in axes:
+            cols += ["%s_a%d" % (k, a) for k in HIST_PATHS]
+        cols += ["vbus", "ibus"]
+        return ",".join(cols) + "\n"
+
+    @staticmethod
+    def _rec_fmt(v):
+        if v is None:
+            return ""
+        if isinstance(v, float):
+            return "%.6g" % v
+        return str(v)
+
+    def _rec_write(self, t):
+        f = self._rec
+        vals = [t]
+        for a in self.axes:
+            vals += [self.snapshot.get("axis%d.%s" % (a, p))
+                     for p in HIST_PATHS.values()]
+        vals += [self.snapshot.get("vbus_voltage"), self.snapshot.get("ibus")]
+        try:
+            f.write(",".join(self._rec_fmt(v) for v in vals) + "\n")
+            self._rec_count += 1
+            if self._rec_count % max(1, self.poll_rate) == 0:
+                f.flush()
+        except Exception as e:
+            self._rec_close()
+            self._emit("log", "[录制] 写入失败,已停止: %s" % e)
+            self._emit("recording", False, "")
+
+    def _rec_close(self):
+        if self._rec is not None:
+            try:
+                self._rec.close()
+            except Exception:
+                pass
+            self._rec = None
+            self.recording = False
+            self._emit("recording", False, "")
+
+    def _do_record_start(self, path):
+        if self._rec is not None:
+            self._emit("log", "[录制] 已在录制中")
+            return
+        try:
+            f = open(path, "w", encoding="utf-8", newline="")
+        except Exception as e:
+            self._emit("log", "[录制] 打开文件失败: %s" % e)
+            return
+        f.write(self._rec_header(self.axes))
+        self._rec = f
+        self._rec_count = 0
+        self.recording = True
+        self._emit("recording", True, path)
+
+    def _do_record_stop(self):
+        if self._rec is None:
+            return
+        self._rec_close()
 
     # ---- 读写 ----
 

@@ -5,10 +5,12 @@
 第三行横排: [PID 调参 | 通用控制 + 通用设置 | 命令行 + 点动/设定值]
 """
 
+import time
+
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
-    QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-    QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QGridLayout, QGroupBox,
+    QHBoxLayout, QLabel, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget,
 )
 
 from .control_panel import ControlLoopBox, GeneralControlsBox, JogControlBox, TorqueBox
@@ -42,10 +44,14 @@ class ConnectionControlBox(QGroupBox):
         self.axis_combo = QComboBox()
         self.axis_combo.currentIndexChanged.connect(self._on_axis_changed)
         g.addWidget(self.axis_combo, 0, 3, 1, 2)
-        g.setColumnStretch(4, 1)
+        self.chk_auto = QCheckBox("自动重连")
+        self.chk_auto.setChecked(worker.auto_reconnect)
+        self.chk_auto.setToolTip("设备意外掉线后按序列号自动重连(手动断开不触发)")
+        self.chk_auto.toggled.connect(worker.set_auto_reconnect)
+        g.addWidget(self.chk_auto, 0, 5)
         self.lab_status = QLabel("未连接")
         self.lab_status.setStyleSheet("color:#8a93a5; font-size:10px;")
-        g.addWidget(self.lab_status, 1, 0, 1, 5)
+        g.addWidget(self.lab_status, 1, 0, 1, 6)
 
     def _toggle(self):
         if self.worker.connected:
@@ -72,6 +78,14 @@ class ConnectionControlBox(QGroupBox):
         self.led.setStyleSheet("color:#ffb74d; font-size:16px;")
         self.lab_status.setText("连接中…")
 
+    def set_reconnecting(self, attempt):
+        """自动重连中的状态(橙色灯,连接按钮保持可用)。"""
+        self.btn_connect.setEnabled(True)
+        self.btn_connect.setText("连接")
+        self.led.setStyleSheet("color:#ffb74d; font-size:16px;")
+        self.lab_status.setText("自动重连中…(第 %d 次)" % attempt
+                                if attempt else "自动重连中…")
+
     def set_axes(self, axes):
         cur = self.axis_combo.currentData()
         self.axis_combo.blockSignals(True)
@@ -89,13 +103,14 @@ class ConnectionControlBox(QGroupBox):
 
 
 class GeneralSettingsBox(QGroupBox):
-    """通用设置(General device settings):电流限幅 + 曲线清空/导出 CSV。"""
+    """通用设置(General device settings):电流限幅 + 曲线清空/导出 CSV/连续录制。"""
 
     def __init__(self, worker, monitor, parent=None):
         super().__init__("通用设置", parent)
         self.worker = worker
         self.monitor = monitor
         self.axis = 0
+        self._recording = False
         g = QGridLayout(self)
         g.setContentsMargins(6, 2, 6, 4)
         g.setVerticalSpacing(3)
@@ -112,14 +127,34 @@ class GeneralSettingsBox(QGroupBox):
         g.addWidget(self.btn_lim, 0, 2)
         self.btn_clear = QPushButton("清空曲线")
         self.btn_csv = QPushButton("导出 CSV")
+        self.btn_rec = QPushButton("开始录制")
+        self.btn_rec.setToolTip("边采边写 CSV(按轮询频率落盘),\n"
+                                "断线时暂停写入、重连后继续;不会受 60s 曲线缓冲限制")
         g.addWidget(self.btn_clear, 1, 0)
         g.addWidget(self.btn_csv, 1, 1)
+        g.addWidget(self.btn_rec, 1, 2)
         self.btn_clear.clicked.connect(monitor.clear)
         self.btn_csv.clicked.connect(monitor._export_csv)
+        self.btn_rec.clicked.connect(self._toggle_rec)
 
     def _write_lim(self):
         self.worker.write_req("axis%d.controller.config.current_lim" % self.axis,
                               self.lim_spin.value())
+
+    def _toggle_rec(self):
+        if self._recording:
+            self.worker.record_stop_req()
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "选择录制文件", "odrv_record_%s.csv" % time.strftime("%H%M%S"),
+            "CSV (*.csv)")
+        if path:
+            self.worker.record_req(path)
+
+    def on_event(self, ev):
+        if ev[0] == "recording":
+            self._recording = bool(ev[1])
+            self.btn_rec.setText("停止录制" if ev[1] else "开始录制")
 
     def update_state(self, snap):
         lim = snap.get("axis%d.controller.config.current_lim" % self.axis)
@@ -243,12 +278,16 @@ class WorkArea(QWidget):
     def set_connecting(self):
         self.conn.set_connecting()
 
+    def set_reconnecting(self, attempt):
+        self.conn.set_reconnecting(attempt)
+
     # ---- 事件分发(GUI 线程) ----
 
     def on_event(self, ev):
         self.jog.on_event(ev)
         self.pid.on_event(ev)
         self.terminal.on_event(ev)
+        self.settings.on_event(ev)
 
     # ---- 周期刷新(GUI 线程) ----
 
