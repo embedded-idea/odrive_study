@@ -174,7 +174,7 @@ GPIO_MODE_DIGITAL                      # 0
 ### 第 2 步：先看状态，不改任何东西
 
 ```python
-dev0.vbus_voltage              # 期望 12V 左右
+dev0.vbus_voltage              # ≈ 实际供电电压(56V 版满压约 56V,低压调试则更低)
 dev0.axis0.current_state       # 1 = IDLE
 dump_errors(dev0)              # 期望没有红色错误
 ```

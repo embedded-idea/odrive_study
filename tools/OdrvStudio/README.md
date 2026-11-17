@@ -1,8 +1,8 @@
 # OdrvStudio
 
 参考 [SimpleFOCStudio](https://github.com/JorgeMaker/SimpleFOCStudio) 架构开发的
-ODrive 桌面调试工作台(PyQt5 + PyQtGraph),针对 ODrive v3.6 + 2804 云台电机 +
-AS5047P 适配,支持双轴。
+ODrive 桌面调试工作台(PyQt5 + PyQtGraph),针对 ODrive v3.6(含 56V 版本)+
+2804 云台电机 + AS5047P 适配,支持双轴。
 
 ## 启动
 

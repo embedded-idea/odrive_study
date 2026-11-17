@@ -8,20 +8,26 @@
 
 > 适用环境（本仓库实测）
 >
-> - 硬件：ODrive v3.6（STM32F405 + DRV8301），12V 电源
+> - 硬件：ODrive v3.6 **56V 版本**（STM32F405 + DRV8301，母线电容耐压 56V；
+>   固件与 24V/48V 版本通用）。56V 版可用低压电源调试，母线电压以实测为准
 > - 固件：`fw-v0.5.6min`（`dev0.fw_version` 读回 0.5.6）
 > - 上位机：`odrive 0.6.11.post1` + IPython（venv 在 `~/.odrive-venv`）
 > - 系统：Windows + WSL2（USB 通过 `usbipd-win` 挂进 WSL）
 > - 电机：2804 云台电机，12N14P → `pole_pairs = 7`
 > - 编码器：AS5047P（SPI 绝对值），CS 接 **GPIO1 = PA0**
 > - 设备名：因为板子 `otp_valid = False`，工具把设备命名为 **`dev0`**，不是 `odrv0`
+>
+> **56V 版本注意**：接 36V 以上电源时，核对 `dev0.config.dc_bus_overvoltage_trip_level`
+> （须高于母线电压但有裕量）和 `dev0.config.brake_resistance`（外接制动电阻阻值/功率），
+> 减速回馈能量靠制动电阻泄放，母线过压会触发 `DC_BUS_OVER_VOLTAGE` 急停。
+> 低压调试时同样建议检查这两项，避免默认值与实际电源不匹配。
 
 ---
 
 ## 0. 三十秒状态检查
 
 ```python
-dev0.vbus_voltage                      # 12V 左右
+dev0.vbus_voltage                      # ≈ 实际供电电压(56V 版满压约 56V,低压调试则更低)
 dev0.axis0.current_state               # 1=IDLE, 8=CLOSED_LOOP_CONTROL
 dev0.axis0.error                       # 0
 dev0.axis0.motor.error                 # 0
