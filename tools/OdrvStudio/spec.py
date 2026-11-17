@@ -5,12 +5,33 @@
 """
 
 import os
+import sys
 
 import yaml
 
 DEFAULT_SPEC = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..", "odrive-interface.yaml"
 )
+
+
+def _resolve_spec(path):
+    """定位 odrive-interface.yaml。
+
+    PyInstaller 打包后 __file__ 指向解包目录,仓库相对路径失效;
+    依次回退: PyInstaller 资源目录 / exe 所在目录。
+    """
+    path = os.path.abspath(path)
+    if os.path.exists(path):
+        return path
+    candidates = [
+        os.path.join(getattr(sys, "_MEIPASS", ""), "odrive-interface.yaml"),
+        os.path.join(os.path.dirname(os.path.abspath(sys.executable)),
+                     "odrive-interface.yaml"),
+    ]
+    for cand in candidates:
+        if cand and os.path.exists(cand):
+            return os.path.abspath(cand)
+    return path
 
 
 class Attr:
@@ -115,7 +136,7 @@ def _walk(attrs, prefix, interfaces, depth=0):
 
 def load_spec(path=None):
     """返回设备顶层 Attr 列表(以具体板卡接口为根,如 ODrive3)。"""
-    path = os.path.abspath(path or DEFAULT_SPEC)
+    path = _resolve_spec(path or DEFAULT_SPEC)
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     interfaces = data.get("interfaces", {})
