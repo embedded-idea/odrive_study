@@ -18,11 +18,11 @@ AS5047P 适配,支持双轴。
 PYTHONPATH=tools ~/.odrive-venv/bin/python -m OdrvStudio
 ```
 
-依赖(已装入 `~/.odrive-venv`,见仓库根目录 `requirements.txt`):
+依赖(已装入 `~/.odrive-venv`,见本目录 `requirements.txt`):
 `odrive`、`PyQt5`、`pyqtgraph`、`PyYAML`(其余为 odrive 包的传递依赖)。
 
 ```bash
-~/.odrive-venv/bin/pip install -r requirements.txt
+~/.odrive-venv/bin/pip install -r tools/OdrvStudio/requirements.txt
 ```
 
 WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
