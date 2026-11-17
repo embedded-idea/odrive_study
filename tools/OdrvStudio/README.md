@@ -22,19 +22,30 @@ PYTHONPATH=tools ~/.odrive-venv/bin/python -m OdrvStudio
 
 WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 
-## 界面布局(照搬 SimpleFOCStudio-zh)
+## 界面布局(照搬 SimpleFOCStudio-zh formview)
 
 ```
-┌ 工具栏: [➕设备▾(树形/表格视图)] [📂打开] [💾保存] [🛠生成代码] │ [⌨命令行交互] │ [⛔急停] [ℹ关于] ┐
+┌ 工具栏: [设备+(树形/表格视图)] [打开] [保存] [生成代码] │ [命令行交互] │ [急停] [关于] ┐
 ├ 标签页(可关闭/可拖动): [设备 — ODrive v3.6 56V] [设备(树形视图)] [生成代码] [命令行交互] ┤
-│ ┌ 设备页(deviceConfigurationTool 布局) ────────────────────────────────────────┐ │
-│ │ [DRO 数字读出 | 控制环(模式+进闭环) | 力矩控制 | 连接控制(灯/连接/轮询/轴)] │ │
-│ │ [实时曲线: 速度 / 位置 / Iq·Vbus·Ibus,双轴同屏]                            │ │
-│ │ [PID 调参+阶跃测试 | 通用控制+通用设置(暂停/清空/CSV) | 命令行+点动/设定值] │ │
-│ └─────────────────────────────────────────────────────────────────────────────┘ │
+│ ┌ 设备页(deviceConfigurationTool 布局,三段垂直可拖动) ─────────────────────┐ │
+│ │ [DRO 数码管(位置/速度/Iq/目标) | 控制环模式▾ | 力矩控制 | 连接控制]      │ │
+│ │ 实时电机变量: 单块黑色曲线 + 图例(目标/速度/位置/电流,双轴同屏)         │ │
+│ │ [停止|暂停|View all + 曲线显隐复选框 + Downsample]                       │ │
+│ │ [PID 控制器配置(选择环▾+参数行+阶跃测试) | 通用控制+通用设置 | 命令行+点动] │ │
+│ └──────────────────────────────────────────────────────────────────────────┘ │
 ├ 状态栏: 固件版本 │ 错误摘要 ─────────────────────────────────────────────────────┤
 ```
 
+- **DRO**:四个七段数码管(QLCDNumber,红色 LED 样式)显示当前轴的
+  位置/速度/Iq/目标,目标值按控制模式自动取 input_vel/input_pos/input_torque;
+  下方小字显示 状态/Vbus/Ibus
+- **曲线**:单块黑色大图(pyqtgraph),图例内嵌;图下控制行:停止(当前轴)、
+  暂停、View all(缩放复位)、目标/速度/位置/电流 显隐复选框、
+  Downsample(每条曲线最多绘制点数,默认 500,抽稀降负载)
+- **控制环模式**:下拉框选择 速度/位置/力矩(写 control_mode);进入闭环/回 IDLE
+  在“通用控制”里(同 SFS 的 Disable Device)
+- **PID 控制器配置**:选择环(速度环/位置环)下拉切换参数行,每行 读/写 +
+  全部读取;阶跃测试(幅度/时长/开始)直接观察上方主曲线的响应
 - **添加设备 ▾**:树形视图(参数树标签页)/ 表格视图(设备页),与 SFS 的
   addDeviceMenu 一致;设备页可关闭后重新添加
 - **打开 / 保存**:配置快照 JSON 的载入与保存(生成代码页承载)
@@ -46,11 +57,12 @@ WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 | 模块 | 对应 SimpleFOCStudio-zh | 说明 |
 |---|---|---|
 | 连接控制 | connectionControl | 设备页第一行:状态灯 / 连接断开 / 轮询频率 / 轴选择 |
-| DRO + 实时曲线 | droDisplayWidget / graphicWidget | 状态、Vbus、Ibus、速度、位置、Iq、三相电流;**双轴曲线同屏对比** |
-| 控制环 + 力矩 | controlLoopConfig / torqueConfig | 模式切换(速度/位置/力矩)、进闭环/回 IDLE、input_torque 设定、current_lim 限幅 |
+| DRO 数码管 | droDisplayWidget | 位置/速度/Iq/目标 四个七段数码管 + 状态/Vbus/Ibus 小字;目标随控制模式自动切换 |
+| 实时曲线 | graphicWidget | 单块黑色图 + 图例:目标/速度/位置/电流 + Vbus/Ibus 虚线;**双轴同屏对比**;停止/暂停/View all/曲线显隐/Downsample |
+| 控制环模式 + 力矩 | controlLoopConfig / torqueConfig | 模式下拉(速度/位置/力矩)、input_torque 设定、current_lim 限幅 |
 | 点动 / 设定值 | deviceJoggingControl | 速度设定+快捷档位、点动(按住生效)、位置绝对/相对 |
-| 通用控制 | generalControls | 电机/编码器标定、保存配置、清除错误、全轴急停 |
-| 通用设置 | generalSettingsWidget | 曲线暂停/清空/导出 CSV |
+| 通用控制 | generalControls | 进入闭环/回 IDLE、电机/编码器标定、保存配置、清除错误、全轴急停 |
+| 通用设置 | generalSettingsWidget | 曲线清空/导出 CSV |
 | PID 调参 | pidConfiguration | vel_gain / vel_integrator_gain / pos_gain / vel_limit / vel_ramp_rate 单项或批量读写,速度阶跃测试并绘制 setpoint 与实际响应 |
 | 设备(树形视图) | treeViewConfigTool | 解析固件仓库的 `odrive-interface.yaml`(约 680 个可读属性),惰性加载、按名过滤、双击写入(仅 rw),错误位自动翻译 |
 | 生成代码 | generatedCodeDisplay | 读当前配置生成 odrivetool 风格 Python 初始化脚本(带单位/说明注释),可复制或导出 .py |

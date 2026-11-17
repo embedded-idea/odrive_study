@@ -10,10 +10,10 @@
 """
 
 from PyQt5.QtWidgets import (
-    QButtonGroup, QDoubleSpinBox, QGridLayout, QGroupBox, QPushButton,
+    QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QLabel, QPushButton,
 )
 
-MODES = [("速度", 2), ("位置", 3), ("力矩", 1)]
+MODES = [("速度模式", 2), ("位置模式", 3), ("力矩模式", 1)]
 STATE_CLOSED_LOOP = 8
 STATE_IDLE = 1
 
@@ -34,33 +34,75 @@ class _AxisBox(QGroupBox):
 
 
 class ControlLoopBox(_AxisBox):
-    """控制环:模式选择(速度/位置/力矩)+ 进入闭环 / 回 IDLE。"""
+    """控制环模式:下拉框选择 速度/位置/力矩(写 control_mode)。"""
 
     def __init__(self, worker, parent=None):
-        super().__init__(worker, "控制环", parent)
+        super().__init__(worker, "控制环模式", parent)
         g = QGridLayout(self)
-        self.mode_group = QButtonGroup(self)
-        for i, (name, num) in enumerate(MODES):
-            btn = QPushButton(name)
-            btn.setCheckable(True)
-            btn.setToolTip("control_mode = %d" % num)
-            self.mode_group.addButton(btn, num)
-            g.addWidget(btn, 0, i)
+        self.mode_combo = QComboBox()
+        for name, num in MODES:
+            self.mode_combo.addItem(name, num)
+        g.addWidget(self.mode_combo, 0, 0)
+        lab = QLabel("control_mode")
+        lab.setStyleSheet("color:#8a93a5; font-size:10px;")
+        g.addWidget(lab, 1, 0)
+        self.mode_combo.currentIndexChanged.connect(self._on_mode)
+
+    def _on_mode(self, idx):
+        num = self.mode_combo.itemData(idx)
+        if num is not None:
+            self.worker.write_req(self._p("controller.config.control_mode"), num)
+
+    def update_state(self, snap):
+        mode = snap.get(self._p("controller.config.control_mode"))
+        if isinstance(mode, int):
+            idx = self.mode_combo.findData(mode)
+            if idx >= 0 and idx != self.mode_combo.currentIndex():
+                self.mode_combo.blockSignals(True)
+                self.mode_combo.setCurrentIndex(idx)
+                self.mode_combo.blockSignals(False)
+
+
+class GeneralControlsBox(_AxisBox):
+    """通用控制:进入闭环 / 回 IDLE / 全轴急停(对照 SFS 三按钮)。"""
+
+    def __init__(self, worker, parent=None):
+        super().__init__(worker, "通用控制", parent)
+        g = QGridLayout(self)
+        g.setSpacing(4)
         self.btn_start = QPushButton("进入闭环")
         self.btn_stop = QPushButton("回 IDLE")
-        g.addWidget(self.btn_start, 1, 0)
-        g.addWidget(self.btn_stop, 1, 1, 1, 2)
-        self.mode_group.button(2).setChecked(True)
+        self.btn_estop = QPushButton("⛔ 急停")
+        self.btn_estop.setToolTip("全部轴立即回 IDLE")
+        self.btn_estop.setStyleSheet(
+            "QPushButton{background:#b71c1c;color:white;font-weight:bold;}"
+            "QPushButton:hover{background:#d32f2f;}")
+        g.addWidget(self.btn_start, 0, 0)
+        g.addWidget(self.btn_stop, 0, 1)
+        g.addWidget(self.btn_estop, 0, 2)
+        self.btn_cal_motor = QPushButton("电机标定")
+        self.btn_cal_enc = QPushButton("编码器标定")
+        self.btn_save = QPushButton("保存配置")
+        self.btn_clear = QPushButton("清除错误")
+        g.addWidget(self.btn_cal_motor, 1, 0)
+        g.addWidget(self.btn_cal_enc, 1, 1)
+        g.addWidget(self.btn_save, 2, 0)
+        g.addWidget(self.btn_clear, 2, 1)
+        self.btn_cal_motor.clicked.connect(
+            lambda: self.worker.action_req("cal_motor", self.axis))
+        self.btn_cal_enc.clicked.connect(
+            lambda: self.worker.action_req("cal_encoder", self.axis))
+        self.btn_save.clicked.connect(lambda: self.worker.action_req("save"))
+        self.btn_clear.clicked.connect(
+            lambda: self.worker.action_req("clear_errors"))
         self.btn_start.clicked.connect(self._on_start)
         self.btn_stop.clicked.connect(self._on_stop)
-        self.mode_group.buttonClicked[int].connect(self._on_mode)
-
-    def _on_mode(self, num):
-        self.worker.write_req(self._p("controller.config.control_mode"), num)
+        self.btn_estop.clicked.connect(lambda: self.worker.action_req("estop"))
 
     def _on_start(self):
-        num = self.mode_group.checkedId()
-        if num > 0:
+        num = self.worker.snapshot.get(
+            self._p("controller.config.control_mode"))
+        if isinstance(num, int) and num > 0:
             self.worker.write_req(self._p("controller.config.control_mode"), num)
         self.worker.action_req("start", self.axis)
 
@@ -73,11 +115,6 @@ class ControlLoopBox(_AxisBox):
         idle = state == STATE_IDLE
         self.btn_start.setEnabled(idle or state is None or not closed)
         self.btn_stop.setEnabled(state is not None and not idle)
-        mode = snap.get(self._p("controller.config.control_mode"))
-        if isinstance(mode, int) and self.mode_group.checkedId() != mode:
-            btn = self.mode_group.button(mode)
-            if btn is not None:
-                btn.setChecked(True)
 
 
 class TorqueBox(_AxisBox):
@@ -126,42 +163,13 @@ class TorqueBox(_AxisBox):
             self.lim_spin.setValue(float(lim))
 
 
-class GeneralControlsBox(_AxisBox):
-    """通用控制:标定 / 保存 / 清错 / 急停(全轴)。"""
-
-    def __init__(self, worker, parent=None):
-        super().__init__(worker, "通用控制", parent)
-        g = QGridLayout(self)
-        self.btn_cal_motor = QPushButton("电机标定")
-        self.btn_cal_enc = QPushButton("编码器标定")
-        self.btn_save = QPushButton("保存配置")
-        self.btn_clear = QPushButton("清除错误")
-        g.addWidget(self.btn_cal_motor, 0, 0)
-        g.addWidget(self.btn_cal_enc, 0, 1)
-        g.addWidget(self.btn_save, 1, 0)
-        g.addWidget(self.btn_clear, 1, 1)
-        self.btn_cal_motor.clicked.connect(
-            lambda: self.worker.action_req("cal_motor", self.axis))
-        self.btn_cal_enc.clicked.connect(
-            lambda: self.worker.action_req("cal_encoder", self.axis))
-        self.btn_save.clicked.connect(lambda: self.worker.action_req("save"))
-        self.btn_clear.clicked.connect(
-            lambda: self.worker.action_req("clear_errors"))
-        self.btn_estop = QPushButton("⛔ 急停 (全部轴 → IDLE)")
-        self.btn_estop.setStyleSheet(
-            "QPushButton{background:#b71c1c;color:white;font-weight:bold;"
-            "padding:8px;border-radius:4px;}"
-            "QPushButton:hover{background:#d32f2f;}")
-        self.btn_estop.clicked.connect(lambda: self.worker.action_req("estop"))
-        g.addWidget(self.btn_estop, 2, 0, 1, 2)
-
-
 class JogControlBox(_AxisBox):
-    """点动 / 设定值:速度设定 + 快捷档位 + 点动,位置绝对/相对。"""
+    """点动 / 设定值:速度设定 + 快捷档位 + 点动,位置绝对/相对(紧凑两行)。"""
 
     def __init__(self, worker, parent=None):
         super().__init__(worker, "点动 / 设定值", parent)
         g = QGridLayout(self)
+        g.setVerticalSpacing(3)
         self.vel_spin = QDoubleSpinBox()
         self.vel_spin.setRange(-100.0, 100.0)
         self.vel_spin.setDecimals(3)
@@ -171,32 +179,32 @@ class JogControlBox(_AxisBox):
         self.btn_vel_send.clicked.connect(
             lambda: self.send_vel(self.vel_spin.value()))
         g.addWidget(self.btn_vel_send, 0, 2)
-        for col, v in enumerate((-1.0, -0.5, 0.0, 0.5, 1.0)):
-            btn = QPushButton(("%g" % v))
-            btn.setToolTip("input_vel = %g" % v)
-            btn.clicked.connect(lambda _, x=v: self.send_vel(x))
-            g.addWidget(btn, 1, col)
         self.btn_jog_ccw = QPushButton("◀ 点动")
         self.btn_jog_cw = QPushButton("点动 ▶")
-        g.addWidget(self.btn_jog_ccw, 2, 0, 1, 2)
-        g.addWidget(self.btn_jog_cw, 2, 3, 1, 2)
+        g.addWidget(self.btn_jog_ccw, 0, 3)
+        g.addWidget(self.btn_jog_cw, 0, 4)
         self.btn_jog_ccw.pressed.connect(
             lambda: self.send_vel(-self._jog_speed()))
         self.btn_jog_cw.pressed.connect(
             lambda: self.send_vel(self._jog_speed()))
         for b in (self.btn_jog_ccw, self.btn_jog_cw):
             b.released.connect(lambda: self.send_vel(0.0))
+        for col, v in enumerate((-1.0, -0.5, 0.0, 0.5, 1.0)):
+            btn = QPushButton(("%g" % v))
+            btn.setToolTip("input_vel = %g" % v)
+            btn.clicked.connect(lambda _, x=v: self.send_vel(x))
+            g.addWidget(btn, 1, col)
         self.pos_spin = QDoubleSpinBox()
         self.pos_spin.setRange(-1e6, 1e6)
         self.pos_spin.setDecimals(3)
         self.pos_spin.setSingleStep(0.1)
-        g.addWidget(self.pos_spin, 3, 0, 1, 2)
+        g.addWidget(self.pos_spin, 2, 0, 1, 2)
         self.btn_pos_abs = QPushButton("绝对")
         self.btn_pos_rel = QPushButton("相对 +")
         self.btn_pos_rel_neg = QPushButton("相对 -")
-        g.addWidget(self.btn_pos_abs, 3, 2)
-        g.addWidget(self.btn_pos_rel, 4, 0)
-        g.addWidget(self.btn_pos_rel_neg, 4, 1)
+        g.addWidget(self.btn_pos_abs, 2, 2)
+        g.addWidget(self.btn_pos_rel, 2, 3)
+        g.addWidget(self.btn_pos_rel_neg, 2, 4)
         self.btn_pos_abs.clicked.connect(self._pos_abs)
         self.btn_pos_rel.clicked.connect(lambda: self._pos_rel(+1))
         self.btn_pos_rel_neg.clicked.connect(lambda: self._pos_rel(-1))

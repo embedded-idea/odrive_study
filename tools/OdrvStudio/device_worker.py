@@ -48,6 +48,9 @@ def _axis_paths(a):
         "axis%d.config.enable_sensorless_mode" % a,
         "axis%d.encoder.config.pre_calibrated" % a,
         "axis%d.controller.config.control_mode" % a,
+        "axis%d.controller.input_vel" % a,
+        "axis%d.controller.input_pos" % a,
+        "axis%d.controller.input_torque" % a,
     ]
     return fast, slow
 

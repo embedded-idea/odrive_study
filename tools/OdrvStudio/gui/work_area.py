@@ -5,10 +5,10 @@
 第三行横排: [PID 调参 | 通用控制 + 通用设置 | 命令行 + 点动/设定值]
 """
 
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QComboBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QPushButton,
-    QSpinBox, QVBoxLayout, QWidget,
+    QSpinBox, QSplitter, QVBoxLayout, QWidget,
 )
 
 from .control_panel import ControlLoopBox, GeneralControlsBox, JogControlBox, TorqueBox
@@ -93,25 +93,18 @@ class ConnectionControlBox(QGroupBox):
 
 
 class GeneralSettingsBox(QGroupBox):
-    """通用设置:曲线暂停 / 清空 / 导出 CSV。"""
+    """通用设置:曲线清空 / 导出 CSV。"""
 
     def __init__(self, monitor, parent=None):
         super().__init__("通用设置", parent)
         self.monitor = monitor
         g = QGridLayout(self)
-        self.btn_pause = QPushButton("暂停曲线")
-        self.btn_pause.setCheckable(True)
         self.btn_clear = QPushButton("清空曲线")
         self.btn_csv = QPushButton("导出 CSV")
-        g.addWidget(self.btn_pause, 0, 0)
-        g.addWidget(self.btn_clear, 0, 1)
-        g.addWidget(self.btn_csv, 1, 0, 1, 2)
+        g.addWidget(self.btn_clear, 0, 0)
+        g.addWidget(self.btn_csv, 0, 1)
         self.btn_clear.clicked.connect(monitor.clear)
         self.btn_csv.clicked.connect(monitor._export_csv)
-
-    @property
-    def paused(self):
-        return self.btn_pause.isChecked()
 
 
 class WorkArea(QWidget):
@@ -125,35 +118,47 @@ class WorkArea(QWidget):
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
-        lay.setSpacing(4)
+        lay.setSpacing(2)
 
-        # ---- 第一行: DRO | 控制环 | 力矩 | 连接控制 ----
-        row1 = QHBoxLayout()
+        split = QSplitter(Qt.Vertical)
+        split.setChildrenCollapsible(False)
+        lay.addWidget(split)
+
+        # ---- 第一行: DRO | 控制环模式 | 力矩 | 连接控制 ----
+        row1 = QWidget()
+        r1 = QHBoxLayout(row1)
+        r1.setContentsMargins(0, 0, 0, 0)
+        r1.setSpacing(6)
         self.dro = DROWidget()
-        box_dro = QGroupBox("DRO 数字读出")
+        box_dro = QGroupBox("数字读出 (DRO)")
         dv = QVBoxLayout(box_dro)
-        dv.setContentsMargins(4, 4, 4, 4)
+        dv.setContentsMargins(4, 2, 4, 2)
         dv.addWidget(self.dro)
-        row1.addWidget(box_dro, 3)
+        r1.addWidget(box_dro, 3)
 
         self.loop = ControlLoopBox(worker)
-        row1.addWidget(self.loop, 2)
+        r1.addWidget(self.loop, 2)
 
         self.torque = TorqueBox(worker)
-        row1.addWidget(self.torque, 2)
+        r1.addWidget(self.torque, 2)
 
         self.conn = ConnectionControlBox(worker)
-        row1.addWidget(self.conn, 2)
-        lay.addLayout(row1)
+        r1.addWidget(self.conn, 3)
+        split.addWidget(row1)
 
         # ---- 第二行: 实时曲线 ----
         self.monitor = MonitorWidget()
-        lay.addWidget(self.monitor, 1)
+        self.monitor.stopRequested.connect(
+            lambda: self.worker.action_req("stop", self.axis))
+        split.addWidget(self.monitor)
 
         # ---- 第三行: PID | 通用控制+设置 | 命令行+点动 ----
-        row3 = QHBoxLayout()
+        row3 = QWidget()
+        r3 = QHBoxLayout(row3)
+        r3.setContentsMargins(0, 0, 0, 0)
+        r3.setSpacing(6)
         self.pid = PidPanel(worker)
-        row3.addWidget(self.pid, 4)
+        r3.addWidget(self.pid, 4)
 
         col2 = QWidget()
         c2 = QVBoxLayout(col2)
@@ -164,7 +169,7 @@ class WorkArea(QWidget):
         c2.addWidget(self.general)
         c2.addWidget(self.settings)
         c2.addStretch(1)
-        row3.addWidget(col2, 2)
+        r3.addWidget(col2, 2)
 
         col3 = QWidget()
         c3 = QVBoxLayout(col3)
@@ -174,8 +179,13 @@ class WorkArea(QWidget):
         self.jog = JogControlBox(worker)
         c3.addWidget(self.terminal, 1)
         c3.addWidget(self.jog)
-        row3.addWidget(col3, 3)
-        lay.addLayout(row3)
+        r3.addWidget(col3, 3)
+        split.addWidget(row3)
+
+        split.setStretchFactor(0, 0)
+        split.setStretchFactor(1, 1)
+        split.setStretchFactor(2, 0)
+        split.setSizes([150, 430, 330])
 
         self.conn.axis_combo.currentIndexChanged.connect(self._on_axis_changed)
 
@@ -222,5 +232,5 @@ class WorkArea(QWidget):
         self.dro.update_state(snap)
         self.loop.update_state(snap)
         self.torque.update_state(snap)
-        self.monitor.update_data(self.worker.hist, self.settings.paused)
-        self.pid.refresh_plot(self.worker.hist.get(self.axis))
+        self.general.update_state(snap)
+        self.monitor.update_data(self.worker.hist, self.monitor.btn_pause.isChecked())

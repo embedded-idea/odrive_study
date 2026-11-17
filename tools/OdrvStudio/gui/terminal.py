@@ -62,13 +62,16 @@ class Terminal(QWidget):
         self.prompt = QLineEdit()
         self.prompt.setFont(QFont("Consolas, monospace"))
         self.prompt.setPlaceholderText("输入命令,回车执行(help 查看帮助)")
-        btn = QPushButton("执行")
+        btn = QPushButton("发送")
+        btn_clear = QPushButton("清空")
         bar.addWidget(self.prompt, 1)
         bar.addWidget(btn)
+        bar.addWidget(btn_clear)
         lay.addLayout(bar)
 
         self.prompt.returnPressed.connect(self._run)
         btn.clicked.connect(self._run)
+        btn_clear.clicked.connect(self.out.clear)
         self.prompt.installEventFilter(self)
         self.out.appendPlainText(HELP)
 
