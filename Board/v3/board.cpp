@@ -298,7 +298,7 @@ void system_init() {
         for (;;);
     }
 #else
-    // EG2134/FD6288 定制板通常没有（或没有正确烧写）OTP 版本信息，保留此校验
+    // EG2134 定制板通常没有（或没有正确烧写）OTP 版本信息，保留此校验
     // 会在上电后卡死在 for(;;)（移植手册第 7 节记录的问题）。新板默认跳过。
     (void)otp_ptr;
 #endif
@@ -307,6 +307,19 @@ void system_init() {
 bool board_init() {
     // Initialize all configured peripherals
     MX_GPIO_Init();
+
+#if !defined(GATE_DRIVER_DRV8301)
+    // PD2 在 DRV8301 板上是 nFAULT，EG2134 板上没有该信号，改用状态 LED
+    // （移植手册第 8 节）。在 TIM8 中断里每 0.5s 翻转一次。
+    GPIO_InitTypeDef led_init = {};
+    led_init.Pin = GPIO_PIN_2;
+    led_init.Mode = GPIO_MODE_OUTPUT_PP;
+    led_init.Pull = GPIO_NOPULL;
+    led_init.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOD, &led_init);
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_SET);
+#endif
+
     MX_DMA_Init();
     MX_ADC1_Init();
     MX_ADC2_Init();
@@ -497,6 +510,17 @@ void TIM8_UP_TIM13_IRQHandler(void) {
     // Entry into this function happens at 21-23 clock cycles after the timer
     // update event.
     __HAL_TIM_CLEAR_IT(&htim8, TIM_IT_UPDATE);
+
+#if !defined(GATE_DRIVER_DRV8301)
+    // 状态 LED：PD2（原 nFAULT），0.5s 翻转一次（移植手册第 8 节）。
+    // 该中断频率是 current_meas_hz 的两倍（16kHz），所以计满 current_meas_hz
+    // 正好是 0.5s。
+    static uint32_t led_counter = 0;
+    if (++led_counter >= (uint32_t)current_meas_hz) {
+        led_counter = 0;
+        GPIOD->ODR ^= GPIO_PIN_2;
+    }
+#endif
 
     // If the corresponding timer is counting up, we just sampled in SVM vector 0, i.e. real current
     // If we are counting down, we just sampled in SVM vector 7, with zero current

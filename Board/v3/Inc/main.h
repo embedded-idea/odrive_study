@@ -69,8 +69,9 @@
 #define TIM_1_8_CLOCK_HZ 168000000
 #define TIM_1_8_PERIOD_CLOCKS 3500
 // 20 = 119ns, 100 = 595ns @168MHz (tDTS = 1/168MHz)
-// 取值参考《ODrive移植说明》第 1 节：不同驱动芯片和 MOS 管需要不同的死区时间，
-// 这里沿用该手册在 FD6288 板上的实测值，换 MOS/驱动芯片后请以实际波形为准。
+// 取值参考《ODrive移植说明》第 1 节。手册是在 FD6288 板上实测的；本板实际使用
+// EG2134（内建死区典型 100ns），总死区约为 595ns + 100ns。换 MOS/驱动芯片后
+// 请以实际栅极波形为准。
 #define TIM_1_8_DEADTIME_CLOCKS 100
 #define TIM_APB1_CLOCK_HZ 84000000
 #define TIM_APB1_PERIOD_CLOCKS 4096
