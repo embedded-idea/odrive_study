@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
 
 from .control_panel import ControlLoopBox, GeneralControlsBox, JogControlBox, TorqueBox
 from .monitor import DROWidget, MonitorWidget
+from .motor_id_panel import MotorParamPanel
 from .pid_panel import PidPanel
 from .terminal import Terminal
 
@@ -225,8 +226,10 @@ class WorkArea(QWidget):
         c2.setSpacing(4)
         self.general = GeneralControlsBox(worker)
         self.settings = GeneralSettingsBox(worker, self.monitor)
+        self.motor_id = MotorParamPanel(worker)
         c2.addWidget(self.general)
         c2.addWidget(self.settings)
+        c2.addWidget(self.motor_id)
         c2.addStretch(1)
         r3.addWidget(col2, 2)
 
@@ -265,6 +268,7 @@ class WorkArea(QWidget):
         self.pid.set_axis(axis)
         self.jog.set_axis(axis)
         self.settings.set_axis(axis)
+        self.motor_id.set_axis(axis)
         self.axisChanged.emit(axis)
 
     @property
@@ -289,6 +293,7 @@ class WorkArea(QWidget):
         self.pid.on_event(ev)
         self.terminal.on_event(ev)
         self.settings.on_event(ev)
+        self.motor_id.on_event(ev)
 
     # ---- 周期刷新(GUI 线程) ----
 

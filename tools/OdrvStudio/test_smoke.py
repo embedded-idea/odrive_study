@@ -45,6 +45,8 @@ class FakeTree:
             self.values[path] = v
         self.values["axis0.current_state"] = 8   # 闭环(扫频需要)
         self.values["axis1.current_state"] = 1
+        for p in [p for p in self.values if p.endswith("error")]:
+            self.values[p] = 0   # 无故障(否则会被译成错误位)
 
 
 class FakeNode:
@@ -246,6 +248,32 @@ def stage6():
     check(worker.connected, "auto-reconnected")
     check(worker.axes == [0, 1], "axes restored: %s" % worker.axes)
     check(len(worker.hist.get(0, [])) > 0, "hist preserved across reconnect")
+    # 电机参数识别: 读旧配置 → 写参数+启动 → (模拟)进入校准
+    mid = win.work.motor_id
+    check(mid.btn_start.isEnabled(), "motor-id panel ready")
+    mid.btn_start.click()
+    fake.values["axis0.current_state"] = 4   # 进入 MOTOR_CALIBRATION
+    QTimer.singleShot(700, lambda: fake.values.__setitem__(
+        "axis0.current_state", 1))           # 校准完成 → IDLE
+
+
+def stage7():
+    # 识别结果 + 一键应用
+    mid = win.work.motor_id
+    txt = mid.lab_result.text()
+    check("实测相电阻" in txt and mid.btn_apply.isEnabled(),
+          "motor-id results: %s" % txt.replace("\n", " | ")[:90])
+    if mid.btn_apply.isEnabled():
+        mid.btn_apply.click()
+    QTimer.singleShot(500, stage8)
+
+
+def stage8():
+    # 应用的写命令是异步的,在这里验证
+    check(fake.writes.get("axis0.motor.config.pre_calibrated") is True,
+          "apply wrote pre_calibrated")
+    check(fake.writes.get("axis0.motor.config.phase_resistance") == 1.5,
+          "apply wrote measured phase_resistance")
 
     ok = all(c for c, _ in results)
     for c, msg in results:
@@ -261,6 +289,8 @@ QTimer.singleShot(2400, stage3)
 QTimer.singleShot(3400, stage4)
 QTimer.singleShot(4200, stage5)
 QTimer.singleShot(5200, stage6)
+QTimer.singleShot(6400, stage7)
+QTimer.singleShot(7000, stage8)
 rc = app.exec_()
 worker.stop()
 worker.join(1500)

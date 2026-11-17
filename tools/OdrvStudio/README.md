@@ -85,6 +85,7 @@ WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 | 点动 / 设定值 | deviceJoggingControl | 速度设定+快捷档位、点动(按住生效)、位置绝对/相对 |
 | 通用控制 | generalControls | 进入闭环/回 IDLE、电机/编码器标定、保存配置、清除错误、全轴急停 |
 | 通用设置 | generalSettingsWidget | 电流限幅、曲线清空/导出 CSV、连续录制(边采边写) |
+| 电机参数识别 | (新增) | 一键自动标定:记录旧配置 → 写校准参数(电机类型/校准电流/**按 R×I 自动建议校准电压**)→ 电机标定并跟踪进度 → 实测相电阻/相电感与旧配置对比(τ=L/R、KV 换算、**R>1Ω 建议云台类型**)→ 一键"应用实测值"(写 R/L + pre_calibrated,下次跳过电机校准) |
 | PID 调参 | pidConfiguration | vel_gain / vel_integrator_gain / pos_gain / vel_limit / vel_ramp_rate 单项或批量读写;单步/方波阶跃测试;**速度扫频→Bode 响应标签页**(锁相法幅相特性);增益快照一键恢复、测试期间积分置 0 |
 | 设备(树形视图) | treeViewConfigTool | 解析固件仓库的 `odrive-interface.yaml`(约 680 个可读属性),惰性加载、按名过滤、双击写入(仅 rw),错误位自动翻译 |
 | 生成代码 | generatedCodeDisplay | 读当前配置生成 odrivetool 风格 Python 初始化脚本(带单位/说明注释),可复制或导出 .py |
@@ -129,6 +130,11 @@ USB 卡顿时界面不冻结。设备层常量(错误码表等)在 `OdrvStudio/d
   0.5.6 固件没有直接的相电压测量,故用 Vq/Vd 代替(勾选框 tooltip 已说明)。
   字段只在勾选后才轮询,不勾选不给 USB 增加负载;录制/CSV 始终包含全部列,
   未轮询的列写空值。
+- **电机参数识别**(设备页“通用设置”下方):云台电机务必先把 校准电流 降到
+  0.2–1 A(固件默认 10 A 会烧云台电机);校准电压会按 R×I×1.3 自动建议
+  (上限 0.45×Vbus)。识别失败提示电阻/电感超量程时,增大校准电流或最大电压。
+  完成后点“应用实测值”写入 R/L 并置 `pre_calibrated=True`,
+  掉电保存需再点 通用控制→保存配置(save 会重启设备)。
 - **扫频说明**:激励以 250 Hz 更新 `input_vel`,以约 125 Hz 采样 `vel_estimate`,
   锁相分析逐频点计算幅相(自动去直流、跳过每段前半周期瞬态)。
   扫频期间主曲线只更新速度;急停/停止会立即中止扫频并把 input_vel 归零。
