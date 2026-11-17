@@ -1,7 +1,8 @@
 """生成 OdrvStudio 图标 (.ico)。
 
-设计:BLDC 电机横截面 —— 深色圆角底板 + 定子铁芯(12 槽铜线圈)
-+ 转子 4 极磁钢(N/S 红蓝交替)+ 中心转轴,右下角三根相线(U/V/W)。
+设计:FOC 磁场定向控制主题 —— 深色圆角底板上,三相电流正弦波
+(U/V/W 黄绿蓝,互差 120°) 为底,叠加 SVPWM 六边形与内切圆,
+中央一支橙色电压矢量箭头(带拖尾弧线)指向右上。
 
 用法: .venv\\Scripts\\python tools\\make_icon.py
 输出: tools\\OdrvStudio\\assets\\odrvstudio.ico
@@ -14,6 +15,8 @@ from PIL import Image, ImageDraw
 SIZE = 1024  # 高分辨率绘制,再缩小生成各尺寸
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                    "OdrvStudio", "assets", "odrvstudio.ico")
+
+PHASE_COLORS = ["#f1c40f", "#2ecc71", "#3498db"]  # U / V / W
 
 
 def lerp(a, b, t):
@@ -39,77 +42,74 @@ def polar(cx, cy, r, deg):
     return cx + r * math.cos(a), cy + r * math.sin(a)
 
 
-def draw_motor(d, cx, cy, s):
-    """s = 缩放系数(相对 1024 基准)。"""
-    # ---- 定子外圈(铁芯) ----
-    r_out = 300 * s
-    r_stator_in = 205 * s
-    d.ellipse([cx - r_out, cy - r_out, cx + r_out, cy + r_out],
-              fill="#3d4854", outline="#55637a", width=int(6 * s))
-    d.ellipse([cx - r_stator_in, cy - r_stator_in,
-               cx + r_stator_in, cy + r_stator_in], fill="#243040")
+def draw_foc(d, cx, cy, s):
+    # ---- 三相正弦波(底层,横贯画面) ----
+    amp = 140 * s
+    x0, x1 = 70 * s, (1024 - 70) * s
+    width = int(13 * s)
+    for k, color in enumerate(PHASE_COLORS):
+        phase = k * 120
+        pts = []
+        x = x0
+        while x <= x1:
+            t = (x - cx) / (430 * s)          # 归一化相位(约 1 个周期)
+            y = cy + amp * math.sin(2 * math.pi * t - math.radians(phase))
+            pts.append((x, y))
+            x += 4 * s
+        # 波形发光底衬
+        d.line(pts, fill=color + "40", width=width + int(9 * s), joint="curve")
+        d.line(pts, fill=color, width=width, joint="curve")
 
-    # ---- 12 个定子齿 + 铜线圈 ----
-    n_slots = 12
-    for k in range(n_slots):
-        ang = k * 360 / n_slots
-        a0, a1 = ang - 13, ang + 13
-        # 齿(从定子内缘向外)
-        d.pieslice([cx - r_out, cy - r_out, cx + r_out, cy + r_out],
-                   a0, a1, fill="#3d4854")
-        # 铜线圈(饱满的梯形绕组,靠近内缘)
-        r1, r2 = r_stator_in + 6 * s, r_stator_in + 66 * s
-        p1 = polar(cx, cy, r1, a0)
-        p2 = polar(cx, cy, r1, a1)
-        p3 = polar(cx, cy, r2, a1)
-        p4 = polar(cx, cy, r2, a0)
-        d.polygon([p1, p2, p3, p4], fill="#e08a36", outline="#8a4d16",
-                  width=max(1, int(4 * s)))
+    # ---- SVPWM 六边形(扇区边界) ----
+    r_hex = 320 * s
+    hex_pts = [polar(cx, cy, r_hex, 60 * k - 30) for k in range(6)]
+    d.polygon(hex_pts, outline="#6b7c93", width=int(9 * s))
+    for p in hex_pts:   # 顶点小圆点
+        r = 13 * s
+        d.ellipse([p[0] - r, p[1] - r, p[0] + r, p[1] + r], fill="#6b7c93")
 
-    # ---- 转子:4 极磁钢(N/S 红蓝交替) ----
-    r_rotor = 168 * s
-    d.ellipse([cx - r_rotor, cy - r_rotor, cx + r_rotor, cy + r_rotor],
-              fill="#1a222e", outline="#0f141c", width=int(4 * s))
-    n_poles = 4
-    for k in range(n_poles):
-        a0 = k * 360 / n_poles + 2
-        a1 = (k + 1) * 360 / n_poles - 2
-        color = "#c0392b" if k % 2 == 0 else "#2980b9"
-        d.pieslice([cx - r_rotor, cy - r_rotor, cx + r_rotor, cy + r_rotor],
-                   a0, a1, fill=color)
-    # 转子边缘环
-    d.ellipse([cx - r_rotor, cy - r_rotor, cx + r_rotor, cy + r_rotor],
-              outline="#0d1118", width=int(10 * s))
+    # ---- 内切圆(线性调制边界) ----
+    r_circ = r_hex * math.cos(math.pi / 6)
+    d.ellipse([cx - r_circ, cy - r_circ, cx + r_circ, cy + r_circ],
+              outline="#8fa2b8", width=int(5 * s))
 
-    # ---- 转轴 ----
-    r_shaft = 52 * s
-    d.ellipse([cx - r_shaft, cy - r_shaft, cx + r_shaft, cy + r_shaft],
-              fill="#aeb9c6", outline="#7d8894", width=int(4 * s))
-    d.ellipse([cx - r_shaft * 0.45, cy - r_shaft * 0.45,
-               cx + r_shaft * 0.45, cy + r_shaft * 0.45],
-              fill="#8a95a3")
+    # ---- α/β 轴(细十字) ----
+    d.line([cx - r_hex, cy, cx + r_hex, cy], fill="#46566a",
+           width=int(4 * s))
+    d.line([cx, cy - r_hex, cx, cy + r_hex], fill="#46566a",
+           width=int(4 * s))
 
-    # ---- 三根相线 U/V/W(右下角引出) ----
-    wire_r0 = r_out * 0.82
-    colors = ["#f1c40f", "#2ecc71", "#3498db"]
-    for k, c in enumerate(colors):
-        a = 38 + k * 17  # 右下角度范围
-        p_start = polar(cx, cy, wire_r0, a)
-        p_mid = polar(cx, cy, r_out + 26 * s, a + 6)
-        p_end = polar(cx, cy, r_out + 92 * s, a + 14)
-        d.line([p_start, p_mid, p_end], fill=c,
-               width=max(2, int(16 * s)), joint="curve")
-
-    # ---- 高光弧(玻璃质感) ----
-    d.arc([cx - r_out, cy - r_out, cx + r_out, cy + r_out],
-          200, 320, fill="#ffffff40", width=int(10 * s))
+    # ---- 电压矢量(拖尾弧 + 箭头) ----
+    ang = -52        # 指向右上
+    r_vec = r_circ
+    # 拖尾弧:从箭头后方顺时针扫过约 130°
+    d.arc([cx - r_vec, cy - r_vec, cx + r_vec, cy + r_vec],
+          ang + 16, ang + 150, fill="#e67e2266", width=int(13 * s))
+    p_end = polar(cx, cy, r_vec, ang)
+    # 矢量杆(发光底衬 + 主体)
+    d.line([cx, cy, p_end[0], p_end[1]], fill="#f39c1255",
+           width=int(34 * s))
+    d.line([cx, cy, p_end[0], p_end[1]], fill="#e67e22", width=int(22 * s))
+    # 箭头(底边垂直于杆的三角形)
+    ah = 70 * s       # 箭头长度
+    aw = 56 * s       # 底边宽
+    base = polar(cx, cy, r_vec - ah, ang)
+    perp = polar(0, 0, 1, ang + 90)   # 垂直方向单位向量
+    pa = (base[0] + perp[0] * aw / 2, base[1] + perp[1] * aw / 2)
+    pb = (base[0] - perp[0] * aw / 2, base[1] - perp[1] * aw / 2)
+    pc = polar(cx, cy, r_vec + 12 * s, ang)
+    d.polygon([pa, pb, pc], fill="#e67e22")
+    # 矢量起点圆
+    r0 = 26 * s
+    d.ellipse([cx - r0, cy - r0, cx + r0, cy + r0], fill="#f5f7fa",
+              outline="#2c3e50", width=int(5 * s))
 
 
 def main():
     s = SIZE / 1024.0
     img = rounded_gradient_bg(SIZE, (44, 62, 80), (26, 32, 44), radius=180)
     d = ImageDraw.Draw(img)
-    draw_motor(d, SIZE / 2, SIZE / 2, s)
+    draw_foc(d, SIZE / 2, SIZE / 2, s)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64),
