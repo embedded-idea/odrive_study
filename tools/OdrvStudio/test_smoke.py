@@ -142,9 +142,9 @@ def stage3():
     with open(csv_path) as f:
         header = f.readline().strip()
     check("vel_a0" in header and "vel_a1" in header, "csv columns: %s" % header)
-    # 终端
-    win.work.terminal._exec("get axis1.encoder.pos_estimate")
-    check("axis1.encoder.pos_estimate" in win.work.terminal.out.toPlainText(),
+    # 终端(底部 Dock)
+    win.terminal._exec("get axis1.encoder.pos_estimate")
+    check("axis1.encoder.pos_estimate" in win.terminal.out.toPlainText(),
           "terminal axis1 get")
 
     ok = all(c for c, _ in results)
