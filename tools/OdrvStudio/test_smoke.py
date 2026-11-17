@@ -95,17 +95,25 @@ def stage1():
     check(len(worker.hist.get(0, [])) > 0, "axis0 hist rows")
     check(len(worker.hist.get(1, [])) > 0, "axis1 hist rows")
     check("axis1.encoder.vel_estimate" in worker.snapshot, "axis1 polled")
+    # SFS 风格标签页: 打开 树形视图 / 生成代码 / 命令行交互
+    win.add_device_tree()
+    win.generate_code()
+    win.open_console_tool()
+    check(win.tabs.count() == 4, "tabs opened: %d" % win.tabs.count())
+    check(win.tree is not None and win.config is not None
+          and win.console is not None, "tool tabs registered")
     # 切到 axis1
-    win.work.axis_combo.setCurrentIndex(1)
+    win.work.conn.axis_combo.setCurrentIndex(1)
     check(win.work.axis == 1, "axis switched to 1")
-    check(win.work.control.axis == 1, "control panel axis 1")
+    check(win.work.loop.axis == 1, "control loop box axis 1")
+    check(win.work.jog.axis == 1, "jog box axis 1")
     check(win.work.pid.axis == 1, "pid panel axis 1")
     # 配置读取(axis1)
-    win.work.config.read_from_device()
+    win.config.read_from_device()
 
 
 def stage2():
-    cfg = win.work.config
+    cfg = win.config
     check(len(cfg.values) > 50, "config values read: %d" % len(cfg.values))
     code = cfg.preview.toPlainText()
     check("odrv0.axis1.controller.config.vel_gain = " in code, "code gen axis1 vel_gain")
@@ -122,15 +130,15 @@ def stage2():
     cfg.load_snapshot()
     cfg.map_combo.setCurrentIndex(2)          # axis1 → axis0
     cfg.apply_snapshot()
-    # CSV 导出
+    # CSV 导出(通用设置按钮)
     QFileDialog.getSaveFileName = staticmethod(lambda *a, **k: (csv_path, ""))
-    win.work.monitor._export_csv()
-    # 急停(全轴)
-    worker.action_req("estop")
+    win.work.settings.btn_csv.click()
+    # 急停(全轴, 通用控制按钮)
+    win.work.general.btn_estop.click()
 
 
 def stage3():
-    cfg = win.work.config
+    cfg = win.config
     check(any(p.startswith("axis0.controller.config.")
               for p in fake.writes), "apply wrote axis0 paths (remapped)")
     check(fake.writes.get("axis0.controller.config.vel_gain") == 1.5,
@@ -142,10 +150,23 @@ def stage3():
     with open(csv_path) as f:
         header = f.readline().strip()
     check("vel_a0" in header and "vel_a1" in header, "csv columns: %s" % header)
-    # 终端(底部 Dock)
-    win.terminal._exec("get axis1.encoder.pos_estimate")
-    check("axis1.encoder.pos_estimate" in win.terminal.out.toPlainText(),
-          "terminal axis1 get")
+    # 命令行(设备页内嵌 + 独立“命令行交互”标签),结果异步,stage4 验证
+    win.work.terminal._exec("get axis1.encoder.pos_estimate")
+    win.console._exec("get axis0.vbus_voltage")
+    # 关闭标签页(workAreaTabbedWidget 行为)
+    idx_form = win.tabs.indexOf(win.work)
+    win.tabs.tabCloseRequested.emit(idx_form)
+    check(win.work is None, "device tab closed, work released")
+    win.add_device_form()
+    check(win.work is not None and win.tabs.indexOf(win.work) >= 0,
+          "device tab re-added")
+
+
+def stage4():
+    check("axis1.encoder.pos_estimate" in win.work.terminal.out.toPlainText(),
+          "device-page terminal axis1 get")
+    check("vbus_voltage" in win.console.out.toPlainText(),
+          "console tab axis0 get")
 
     ok = all(c for c, _ in results)
     for c, msg in results:
@@ -158,6 +179,7 @@ def stage3():
 QTimer.singleShot(700, stage1)
 QTimer.singleShot(1500, stage2)
 QTimer.singleShot(2400, stage3)
+QTimer.singleShot(3200, stage4)
 rc = app.exec_()
 worker.stop()
 worker.join(1500)

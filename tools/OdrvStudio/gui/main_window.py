@@ -1,15 +1,16 @@
-"""OdrvStudio - 主窗口(SimpleFOCStudio 风格)。
+"""OdrvStudio - 主窗口(照搬 SimpleFOCStudio-zh 结构)。
 
-布局:左侧竖排图标工具栏 + 设备列表 Dock;中央设备工作区标签页;
-底部终端 Dock;菜单栏(文件 / 查看 / 帮助);状态栏。
+顶部工具栏(添加设备▾ 树形/表格视图 | 打开 | 保存 | 生成代码 | 命令行交互),
+中央可关闭/可拖动的多标签工作区,底部状态栏。
 """
 
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
-    QAction, QLabel, QMainWindow, QMessageBox, QDockWidget, QTabWidget,
-    QToolBar, QTreeWidget, QTreeWidgetItem, QPushButton,
+    QAction, QLabel, QMainWindow, QMenu, QTabWidget, QToolBar, QToolButton,
 )
 
+from .config_panel import ConfigPanel
+from .param_tree import ParamTree
 from .terminal import Terminal
 from .work_area import WorkArea
 from ..device import (
@@ -30,50 +31,28 @@ class MainWindow(QMainWindow):
     def __init__(self, worker, spec_roots):
         super().__init__()
         self.worker = worker
-        self.setWindowTitle("OdrvStudio — ODrive 2804 + AS5047P")
-        self.resize(1360, 820)
+        self.spec_roots = spec_roots
+        self.setWindowTitle("OdrvStudio — ODrive v3.6 56V")
+        self.resize(1360, 860)
 
-        # ---- 中央:设备工作区标签页(workAreaTabbedWidget 风格) ----
-        self.work = WorkArea(worker, spec_roots, self)
+        # ---- 中央: 多标签工作区(workAreaTabbedWidget 风格) ----
         self.tabs = QTabWidget()
+        self.tabs.setTabsClosable(True)
+        self.tabs.setMovable(True)
         self.tabs.setDocumentMode(True)
-        self.tabs.addTab(self.work, "ODrive v3.6 56V — 2804 + AS5047P")
+        self.tabs.tabCloseRequested.connect(self._close_tab)
         self.setCentralWidget(self.tabs)
 
-        # ---- 底部终端 Dock ----
-        self.terminal = Terminal(worker)
-        self.term_dock = QDockWidget("终端", self)
-        self.term_dock.setWidget(self.terminal)
-        self.term_dock.setFeatures(QDockWidget.DockWidgetMovable |
-                                   QDockWidget.DockWidgetClosable)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.term_dock)
+        # 标签页引用(与 SimpleFOCStudio 的 activeToolsList 对应)
+        self.work = WorkArea(worker, spec_roots)
+        self.work.axisChanged.connect(self._on_axis_changed)
+        self.tabs.addTab(self.work, "设备 — ODrive v3.6 56V")
+        self.tree = None       # 参数树(树形视图)
+        self.config = None     # 生成代码 / 配置快照
+        self.console = None    # 命令行交互
 
-        # ---- 左侧设备列表 Dock(devicesInspectorTree 风格) ----
-        self.dev_tree = QTreeWidget()
-        self.dev_tree.setHeaderLabels(["设备", "值"])
-        self.dev_tree.header().resizeSection(0, 190)
-        self.dev_root = QTreeWidgetItem(
-            ["ODrive v3.6 56V", "2804 + AS5047P"])
-        self.dev_tree.addTopLevelItem(self.dev_root)
-        self.dev_info = {}
-        for key, name in (("status", "连接"), ("fw", "固件"),
-                          ("axes", "轴"), ("err", "错误")):
-            it = QTreeWidgetItem([name, "--"])
-            self.dev_root.addChild(it)
-            self.dev_info[key] = it
-        self.dev_root.setExpanded(True)
-        self.dev_tree.itemDoubleClicked.connect(self._on_dev_dblclick)
-        self.dev_dock = QDockWidget("设备", self)
-        self.dev_dock.setWidget(self.dev_tree)
-        self.dev_dock.setFeatures(QDockWidget.DockWidgetMovable |
-                                  QDockWidget.DockWidgetClosable)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.dev_dock)
-
-        # ---- 左侧竖排工具栏 ----
+        # ---- 顶部工具栏 ----
         self._build_toolbar()
-
-        # ---- 菜单栏 ----
-        self._build_menus()
 
         # ---- 状态栏 ----
         self.lab_fw = QLabel("")
@@ -86,123 +65,160 @@ class MainWindow(QMainWindow):
         self._timer.timeout.connect(self._on_timer)
         self._timer.start(50)
 
-    # ---- 工具栏 ----
+    # ---- 工具栏(SimpleFOCConfigToolBar 风格) ----
 
     def _build_toolbar(self):
-        tb = QToolBar("视图")
-        tb.setOrientation(Qt.Vertical)
+        tb = QToolBar("工具")
         tb.setMovable(False)
-        tb.setIconSize(tb.iconSize())
-        self.addToolBar(Qt.LeftToolBarArea, tb)
+        self.addToolBar(Qt.TopToolBarArea, tb)
 
-        def act(text, tip, slot, checkable=False, checked=False):
-            a = QAction(text, self)
-            a.setToolTip(tip)
-            a.setCheckable(checkable)
-            a.setChecked(checked)
-            a.triggered.connect(slot)
-            return a
+        # 添加设备(菜单: 树形视图 / 表格视图)
+        btn_add = QToolButton()
+        btn_add.setText("➕ 设备")
+        btn_add.setToolTip("添加设备视图:\n树形视图 — 参数树\n表格视图 — 设备页")
+        btn_add.setPopupMode(QToolButton.InstantPopup)
+        menu = QMenu(btn_add)
+        act_tree = menu.addAction("🌳 树形视图")
+        act_tree.triggered.connect(self.add_device_tree)
+        act_form = menu.addAction("🗂 表格视图")
+        act_form.triggered.connect(self.add_device_form)
+        btn_add.setMenu(menu)
+        tb.addWidget(btn_add)
 
-        self.act_control = act("🎛", "控制面板", lambda: self.work.show_page(0))
-        self.act_pid = act("📈", "PID 调参", lambda: self.work.show_page(1))
-        self.act_config = act("⚙", "配置 / 代码生成", lambda: self.work.show_page(2))
-        tb.addAction(self.act_control)
-        tb.addAction(self.act_pid)
-        tb.addAction(self.act_config)
-        tb.addSeparator()
-        self.act_tree = act("🌳", "显示/隐藏 参数树",
-                            lambda: self.work.toggle_tree(), True, True)
-        tb.addAction(self.act_tree)
-        self.act_term = act("⌨", "显示/隐藏 终端", self._toggle_term, True, True)
-        tb.addAction(self.act_term)
-        self.act_devs = act("🖧", "显示/隐藏 设备列表", self._toggle_devs, True, True)
-        tb.addAction(self.act_devs)
-        tb.addSeparator()
-        tb.addAction(act("🧹", "清除全部错误",
-                         lambda: self.worker.action_req("clear_errors")))
-        tb.addAction(act("💾", "保存配置(save_configuration)",
-                         lambda: self.worker.action_req("save")))
-        tb.addAction(act("🔄", "重启设备",
-                         lambda: self.worker.action_req("reboot")))
+        act_open = QAction("📂 打开", self)
+        act_open.setToolTip("打开配置快照(JSON)")
+        act_open.triggered.connect(self.open_device)
+        tb.addAction(act_open)
+
+        act_save = QAction("💾 保存", self)
+        act_save.setToolTip("保存配置快照(JSON)")
+        act_save.triggered.connect(self.save_device)
+        tb.addAction(act_save)
+
+        act_gen = QAction("🛠 生成代码", self)
+        act_gen.setToolTip("读取设备配置,生成 odrivetool 风格初始化脚本")
+        act_gen.triggered.connect(self.generate_code)
+        tb.addAction(act_gen)
+
         tb.addSeparator()
 
-        btn_estop = QPushButton("⛔\n急停")
-        btn_estop.setToolTip("全部轴立即回 IDLE")
-        btn_estop.setStyleSheet(
-            "QPushButton{background:#b71c1c;color:white;font-weight:bold;"
-            "padding:8px 10px;border-radius:4px;font-size:13px;}"
-            "QPushButton:hover{background:#d32f2f;}")
-        btn_estop.clicked.connect(lambda: self.worker.action_req("estop"))
-        tb.addWidget(btn_estop)
+        act_console = QAction("⌨ 命令行交互", self)
+        act_console.setToolTip("打开命令行交互标签页")
+        act_console.triggered.connect(self.open_console_tool)
+        tb.addAction(act_console)
 
-    def _toggle_term(self):
-        self.term_dock.setVisible(not self.term_dock.isVisible())
+        tb.addSeparator()
 
-    def _toggle_devs(self):
-        self.dev_dock.setVisible(not self.dev_dock.isVisible())
+        act_estop = QAction("⛔ 急停", self)
+        act_estop.setToolTip("全部轴立即回 IDLE")
+        act_estop.triggered.connect(lambda: self.worker.action_req("estop"))
+        tb.addAction(act_estop)
 
-    def _on_dev_dblclick(self, item, _col):
-        if item is self.dev_root:
-            if self.worker.connected:
-                self.worker.disconnect_req()
-            else:
-                self.worker.connect_req()
-                self.work.set_connecting()
+        tb.addSeparator()
+        act_about = QAction("ℹ 关于", self)
+        act_about.setToolTip("关于 OdrvStudio")
+        act_about.triggered.connect(self._about)
+        tb.addAction(act_about)
 
-    # ---- 菜单栏 ----
-
-    def _build_menus(self):
-        m_file = self.menuBar().addMenu("文件")
-        m_file.addAction("导出配置脚本 (.py)…",
-                         lambda: self.work.config._export_py())
-        m_file.addAction("保存配置快照…", lambda: self.work.config.save_snapshot())
-        m_file.addAction("加载配置快照…", lambda: self.work.config.load_snapshot())
-        m_file.addSeparator()
-        m_file.addAction("退出", self.close)
-
-        m_view = self.menuBar().addMenu("查看")
-        self._menu_term = m_view.addAction("终端")
-        self._menu_term.setCheckable(True)
-        self._menu_term.setChecked(True)
-        self._menu_term.toggled.connect(self.term_dock.setVisible)
-        self._menu_devs = m_view.addAction("设备列表")
-        self._menu_devs.setCheckable(True)
-        self._menu_devs.setChecked(True)
-        self._menu_devs.toggled.connect(self.dev_dock.setVisible)
-        act_tree = m_view.addAction("参数树")
-        act_tree.setCheckable(True)
-        act_tree.setChecked(True)
-        act_tree.toggled.connect(lambda v: self.work.tree.setVisible(v))
-
-        m_help = self.menuBar().addMenu("帮助")
-        m_help.addAction("关于 OdrvStudio", lambda: QMessageBox.about(
+    def _about(self):
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.about(
             self, "关于 OdrvStudio",
-            "OdrvStudio v%s\n参考 SimpleFOCStudio 架构的 ODrive 调试工作台\n"
-            "PyQt5 + PyQtGraph | ODrive v3.6 (56V) + 2804 + AS5047P" % __version__))
+            "OdrvStudio v%s\n参考 SimpleFOCStudio-zh 布局的 ODrive 调试工作台\n"
+            "PyQt5 + PyQtGraph | ODrive v3.6 (56V) + 2804 + AS5047P\n"
+            "双轴支持 | 代码生成 | 配置快照 | CSV 导出" % __version__)
+
+    # ---- 标签页管理(workAreaTabbedWidget 风格) ----
+
+    def add_device_form(self):
+        """表格视图(设备页)。"""
+        if self.work is None:
+            self.work = WorkArea(self.worker, self.spec_roots)
+            self.work.axisChanged.connect(self._on_axis_changed)
+            self.tabs.addTab(self.work, "设备 — ODrive v3.6 56V")
+        self.tabs.setCurrentWidget(self.work)
+        if self.worker.connected:
+            self.work.set_axes(self.worker.axes)
+            self.work.set_connected(True)
+
+    def _on_axis_changed(self, axis):
+        """设备页轴切换 → 同步到其他标签页(生成代码页按轴读取)。"""
+        if self.config is not None:
+            self.config.set_axis(axis)
+
+    def add_device_tree(self):
+        """树形视图(参数树)。"""
+        if self.tree is None:
+            self.tree = ParamTree(self.worker, self.spec_roots)
+            self.tabs.addTab(self.tree, "设备(树形视图)")
+        self.tabs.setCurrentWidget(self.tree)
+
+    def generate_code(self):
+        """生成代码标签页。"""
+        if self.config is None:
+            self.config = ConfigPanel(self.worker, self.spec_roots)
+            self.tabs.addTab(self.config, "生成代码")
+        self.tabs.setCurrentWidget(self.config)
+
+    def open_console_tool(self):
+        """命令行交互标签页。"""
+        if self.console is None:
+            self.console = Terminal(self.worker)
+            self.tabs.addTab(self.console, "命令行交互")
+        self.tabs.setCurrentWidget(self.console)
+
+    def open_device(self):
+        """打开配置快照 → 载入生成代码页。"""
+        self.generate_code()
+        self.config.load_snapshot()
+
+    def save_device(self):
+        """保存配置快照。"""
+        if self.config is not None:
+            self.config.save_snapshot()
+        else:
+            self.statusBar().showMessage(
+                "没有可保存的配置 — 先用“生成代码”页从设备读取", 6000)
+
+    def _close_tab(self, index):
+        w = self.tabs.widget(index)
+        if w is self.work:
+            self.work = None
+        elif w is self.tree:
+            self.tree = None
+        elif w is self.config:
+            self.config = None
+        elif w is self.console:
+            self.console = None
+        self.tabs.removeTab(index)
 
     # ---- 周期刷新 ----
 
     def _on_timer(self):
         for ev in self.worker.drain():
             self._on_event(ev)
-        self.work.update_state(self.worker.snapshot,
-                               self.work.monitor.btn_pause.isChecked())
+        if self.work is not None:
+            self.work.update_state(self.worker.snapshot)
         self._refresh_status()
 
     def _on_event(self, ev):
         kind = ev[0]
         if kind == "connected":
-            self.work.set_connected(True, "已连接(%s)" %
-                                    " ".join("ax%d" % a for a in ev[1]))
-            self.work.set_axes(ev[1])
+            if self.work is not None:
+                self.work.set_connected(True, "已连接(%s)" %
+                                        " ".join("ax%d" % a for a in ev[1]))
+                self.work.set_axes(ev[1])
         elif kind == "connecting":
-            self.work.set_connecting()
+            if self.work is not None:
+                self.work.set_connecting()
         elif kind == "connect_failed":
-            self.work.set_connected(False, "连接失败")
+            if self.work is not None:
+                self.work.set_connected(False, "连接失败")
             self.statusBar().showMessage(ev[1], 8000)
         elif kind == "disconnected":
-            self.work.set_connected(False, "未连接(%s)" % ev[1])
-            self.work.set_axes(self.worker.axes)
+            if self.work is not None:
+                self.work.set_connected(False, "未连接(%s)" % ev[1])
+                self.work.set_axes(self.worker.axes)
             self.lab_fw.setText("")
         elif kind == "log":
             self.statusBar().showMessage(ev[1], 5000)
@@ -212,8 +228,9 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("已写入 %s" % path, 2000)
             else:
                 self.statusBar().showMessage("写入 %s 失败: %s" % (path, err), 5000)
-        self.work.on_event(ev)
-        self.terminal.on_event(ev)
+        for w in (self.work, self.tree, self.config, self.console):
+            if w is not None:
+                w.on_event(ev)
 
     def _refresh_status(self):
         snap = self.worker.snapshot
@@ -240,13 +257,6 @@ class MainWindow(QMainWindow):
         else:
             self.lab_err.setStyleSheet("color:#4caf50;")
             self.lab_err.setText("错误: 无" if self.worker.connected else "")
-
-        # 设备列表
-        self.dev_info["status"].setText(1, "已连接" if self.worker.connected else "未连接")
-        self.dev_info["axes"].setText(1, " ".join("ax%d" % a for a in self.worker.axes)
-                                      if self.worker.connected else "--")
-        self.dev_info["fw"].setText(1, ("v" + fw) if has_fw else "--")
-        self.dev_info["err"].setText(1, "无" if self.worker.connected else "--")
 
     def closeEvent(self, e):
         self.worker.stop()

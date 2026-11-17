@@ -9,8 +9,7 @@ import time
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QFileDialog, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
-    QWidget,
+    QFileDialog, QGridLayout, QLabel, QVBoxLayout, QWidget,
 )
 
 pg.setConfigOptions(antialias=False, background="#111318", foreground="#c8ccd4")
@@ -32,18 +31,6 @@ class MonitorWidget(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(2)
-
-        bar = QHBoxLayout()
-        self.btn_pause = QPushButton("暂停")
-        self.btn_pause.setCheckable(True)
-        self.btn_clear = QPushButton("清空")
-        self.btn_csv = QPushButton("导出 CSV")
-        self.btn_csv.clicked.connect(self._export_csv)
-        bar.addWidget(self.btn_pause)
-        bar.addWidget(self.btn_clear)
-        bar.addWidget(self.btn_csv)
-        bar.addStretch(1)
-        lay.addLayout(bar)
 
         self._plot_lay = QVBoxLayout()
         self._plot_lay.setSpacing(2)
