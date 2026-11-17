@@ -36,6 +36,7 @@ UART_HandleTypeDef* uart_a = &huart4;
 UART_HandleTypeDef* uart_b = &huart2; // TODO: this could be supported in ODrive v3.6 (or similar) using STM32's USART2
 UART_HandleTypeDef* uart_c = nullptr;
 
+#if defined(GATE_DRIVER_DRV8301)
 Drv8301 m0_gate_driver{
     &spi3_arbiter,
     {M0_nCS_GPIO_Port, M0_nCS_Pin}, // nCS
@@ -49,6 +50,14 @@ Drv8301 m1_gate_driver{
     {}, // EN pin (shared between both motors, therefore we actuate it outside of the drv8301 driver)
     {nFAULT_GPIO_Port, nFAULT_Pin} // nFAULT pin (shared between both motors)
 };
+#else
+// EG2134 没有 SPI、使能引脚和故障输出，构造时只需要（可选的）板级故障输入。
+// 如果板上把外部过流比较器的输出接到了原 nFAULT 网络，可以改为：
+//     Eg2134 m0_gate_driver{{nFAULT_GPIO_Port, nFAULT_Pin}};
+// 这样 Motor::do_checks() 才能继续通过 ERROR_DRV_FAULT 报告硬件过流。
+Eg2134 m0_gate_driver{};
+Eg2134 m1_gate_driver{};
+#endif
 
 const float fet_thermistor_poly_coeffs[] =
     {363.93910201f, -462.15369634f, 307.55129571f, -27.72569531f};
@@ -365,6 +374,7 @@ bool board_init() {
     __HAL_DBGMCU_FREEZE_TIM8();
     __HAL_DBGMCU_FREEZE_TIM13();
 
+#if defined(GATE_DRIVER_DRV8301)
     Stm32Gpio drv_enable_gpio = {EN_GATE_GPIO_Port, EN_GATE_Pin};
 
     // Reset both DRV chips. The enable pin also controls the SPI interface, not
@@ -373,6 +383,7 @@ bool board_init() {
     delay_us(40); // mimumum pull-down time for full reset: 20us
     drv_enable_gpio.write(true);
     delay_us(20000); // mimumum pull-down time for full reset: 20us
+#endif
 
     return true;
 }

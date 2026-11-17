@@ -28,6 +28,12 @@
 #define SHUNT_RESISTANCE (500e-6f)
 #endif
 
+// EG2134 板级参数。该芯片没有内置电流采样运放，B/C 相电流由外部运放放大，
+// 以下数值必须与实际电阻网络一致，否则电流环标定会整体偏移。
+#define EG2134_CURRENT_AMP_GAIN       (40.0f)   // [V/V]
+#define EG2134_CURRENT_AMP_MIDPOINT   (1.65f)   // [V]
+#define EG2134_CURRENT_AMP_MAX_SWING  (1.35f)   // [V]
+
 #define AXIS_COUNT (2)
 
 // Total count of GPIOs, including encoder pins, CAN pins and a dummy GPIO0.
@@ -77,14 +83,29 @@
 #define MAX_CONTROL_LOOP_UPDATE_TO_CURRENT_UPDATE_DELTA (TIM_1_8_PERIOD_CLOCKS / 2 + 1 * 128)
 
 #ifdef __cplusplus
+/*
+ * 栅极驱动器选择：
+ *   默认使用 EG2134。如需继续支持原 DRV8301 硬件，编译时加 -DGATE_DRIVER_DRV8301。
+ * 上层代码只通过 TGateDriver/TOpAmp 两个别名访问驱动器，因此切换硬件不需要
+ * 改动 MotorControl 下的任何逻辑。
+ */
+#if defined(GATE_DRIVER_DRV8301)
 #include <Drivers/DRV8301/drv8301.hpp>
+#else
+#include <Drivers/EG2134/eg2134.hpp>
+#endif
 #include <Drivers/STM32/stm32_gpio.hpp>
 #include <Drivers/STM32/stm32_spi_arbiter.hpp>
 #include <MotorControl/pwm_input.hpp>
 #include <MotorControl/thermistor.hpp>
 
+#if defined(GATE_DRIVER_DRV8301)
 using TGateDriver = Drv8301;
 using TOpAmp = Drv8301;
+#else
+using TGateDriver = Eg2134;
+using TOpAmp = Eg2134;
+#endif
 
 #include <MotorControl/motor.hpp>
 #include <MotorControl/encoder.hpp>
@@ -125,8 +146,9 @@ static const int current_meas_hz = CURRENT_MEAS_HZ;
 #error "unknown board voltage"
 #endif
 
-// Linear range of the DRV8301 opamp output: 0.3V...5.7V. We set the upper limit
-// to 3.0V so that it's symmetric around the center point of 1.65V.
+// Linear range of the current sense amplifier output. The DRV8301 opamp is
+// linear from 0.3V to 5.7V; for EG2134 boards the external opamp is supplied
+// from 0V/3.3V, so the same symmetric window around the 1.65V midpoint is used.
 #define CURRENT_SENSE_MIN_VOLT  0.3f
 #define CURRENT_SENSE_MAX_VOLT  3.0f
 

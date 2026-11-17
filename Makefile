@@ -53,6 +53,7 @@ ThirdParty/STM32F4xx_HAL_Driver/Src/stm32f4xx_ll_usb.c
 C_SOURCES_BOARD = \
 ThirdParty/FreeRTOS/Source/portable/GCC/ARM_CM4F/port.c \
 Drivers/DRV8301/drv8301.cpp \
+Drivers/EG2134/eg2134.cpp \
 Board/v3/board.cpp \
 Board/v3/Src/main.c \
 Board/v3/Src/stm32f4xx_hal_timebase_TIM.c \
