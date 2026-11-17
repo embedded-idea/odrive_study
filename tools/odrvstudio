@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# OdrvStudio 启动器(PyQt5 桌面 GUI,参考 SimpleFOCStudio)
+#   ./tools/odrvstudio [--poll-rate 20]
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="${ODRV_PYTHON:-$HOME/.odrive-venv/bin/python}"
+export PYTHONPATH="$DIR${PYTHONPATH:+:$PYTHONPATH}"
+
+exec "$PY" -m OdrvStudio "$@"

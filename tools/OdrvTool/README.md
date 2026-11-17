@@ -35,6 +35,8 @@ PYTHONPATH=tools ~/.odrive-venv/bin/python -m OdrvTool status
 | `currents [-n N] [--csv F]` | 采样三相电流并统计 / 导出 CSV |
 | `gui [--port N]` | 启动 `tools/odrv_gui.py` |
 
+桌面 GUI(参考 SimpleFOCStudio):`./tools/odrvstudio`,见 `tools/OdrvStudio/README.md`。
+
 ## 说明
 
 - 设备一次只能被一个进程占用；用 OdrvTool 时先关掉 Web GUI / `odrivetool`。
