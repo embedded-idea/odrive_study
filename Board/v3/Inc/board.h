@@ -22,15 +22,19 @@
 
 #include <Drivers/STM32/stm32_system.h>
 
+// 相电流采样电阻。移植手册（第 2 节）：单排 MOS 板为 1mΩ（量程 60A），
+// 双排 MOS 板为 0.5mΩ（量程 120A）。板上一般有阻值丝印，请按实际值修改，
+// 并保持 MotorControl/motor.hpp 中 requested_current_range 与之匹配。
 #if HW_VERSION_MINOR <= 3
 #define SHUNT_RESISTANCE (675e-6f)
 #else
 #define SHUNT_RESISTANCE (500e-6f)
 #endif
 
-// EG2134 板级参数。该芯片没有内置电流采样运放，B/C 相电流由外部运放放大，
-// 以下数值必须与实际电阻网络一致，否则电流环标定会整体偏移。
-#define EG2134_CURRENT_AMP_GAIN       (40.0f)   // [V/V]
+// EG2134 板级参数。该芯片没有内置电流采样运放，B/C 相电流由外部运放放大。
+// 外部运放增益固定（《ODrive移植说明》第 5 节：运放倍数固定为 20 倍），
+// 无法像 DRV8301 那样通过 SPI 选择，以下数值必须与实际电阻网络一致。
+#define EG2134_CURRENT_AMP_GAIN       (20.0f)   // [V/V]
 #define EG2134_CURRENT_AMP_MIDPOINT   (1.65f)   // [V]
 #define EG2134_CURRENT_AMP_MAX_SWING  (1.35f)   // [V]
 
@@ -76,11 +80,14 @@
 // Run control loop at the same frequency as the current measurements.
 #define CONTROL_TIMER_PERIOD_TICKS  (2 * TIM_1_8_PERIOD_CLOCKS * (TIM_1_8_RCR + 1))
 
-#define TIM1_INIT_COUNT (TIM_1_8_PERIOD_CLOCKS / 2 - 1 * 128) // TODO: explain why this offset
+// TIM1/TIM8 的相位差。该偏移与死区时间和 MOS 开关速度相关，
+// 手册（第 4 节）在 FD6288 板上使用 512，换硬件后需要配合示波器重新确认。
+#define TIM1_INIT_COUNT (TIM_1_8_PERIOD_CLOCKS / 2 - 1 * 512)
 
 // The delta from the control loop timestamp to the current sense timestamp is
 // exactly 0 for M0 and TIM1_INIT_COUNT for M1.
-#define MAX_CONTROL_LOOP_UPDATE_TO_CURRENT_UPDATE_DELTA (TIM_1_8_PERIOD_CLOCKS / 2 + 1 * 128)
+// 注意：这里的偏移量必须与上面的 TIM1_INIT_COUNT 保持一致。
+#define MAX_CONTROL_LOOP_UPDATE_TO_CURRENT_UPDATE_DELTA (TIM_1_8_PERIOD_CLOCKS / 2 + 1 * 512)
 
 #ifdef __cplusplus
 /*
@@ -139,7 +146,9 @@ static const float current_meas_period = CURRENT_MEAS_PERIOD;
 static const int current_meas_hz = CURRENT_MEAS_HZ;
 
 #if HW_VERSION_VOLTAGE >= 48
-#define VBUS_S_DIVIDER_RATIO 19.0f
+// 官方 ODrive 使用 18k+1k（比值 19.0），移植手册（第 3 节）的板子使用
+// 39k+2.2k，比值 = (39+2.2)/2.2 = 18.727。请按实际分压电阻修改。
+#define VBUS_S_DIVIDER_RATIO 18.727f
 #elif HW_VERSION_VOLTAGE == 24
 #define VBUS_S_DIVIDER_RATIO 11.0f
 #else

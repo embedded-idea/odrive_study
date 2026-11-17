@@ -293,9 +293,15 @@ void system_init() {
 
     // Ensure that the board version for which this firmware is compiled matches
     // the board we're running on.
+#if defined(GATE_DRIVER_DRV8301)
     if (!check_board_version(otp_ptr)) {
         for (;;);
     }
+#else
+    // EG2134/FD6288 定制板通常没有（或没有正确烧写）OTP 版本信息，保留此校验
+    // 会在上电后卡死在 for(;;)（移植手册第 7 节记录的问题）。新板默认跳过。
+    (void)otp_ptr;
+#endif
 }
 
 bool board_init() {
