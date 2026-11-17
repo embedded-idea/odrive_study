@@ -16,7 +16,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..device import friendly_error
 from ..spec import build_index, writable_leaves
+from .theme import mono_font
 
 BATCH = 40
 
@@ -118,8 +120,8 @@ class ConfigPanel(QWidget):
         v = QVBoxLayout(box)
         self.preview = QPlainTextEdit()
         self.preview.setReadOnly(True)
-        self.preview.setStyleSheet(
-            "QPlainTextEdit{font-family:Consolas,monospace;font-size:12px;}")
+        self.preview.setFont(mono_font(12))
+        self.preview.setStyleSheet("QPlainTextEdit{font-size:12px;}")
         self.preview.setPlainText(
             "# (空) — 连接设备后点“从设备读取”生成配置脚本")
         bar = QHBoxLayout()
@@ -257,7 +259,7 @@ class ConfigPanel(QWidget):
             with open(path, "r", encoding="utf-8") as f:
                 doc = json.load(f)
         except Exception as e:
-            self.status.setText("加载失败: %s" % e)
+            self.status.setText("加载失败: %s" % friendly_error(e))
             return
         values = doc.get("values")
         if not isinstance(values, dict) or not values:

@@ -3,6 +3,8 @@
 (原 tools/OdrvTool/device.py 的公共部分,统一进 OdrvStudio)
 """
 
+import re
+
 # 监控曲线字段: hist 行 = (t, <HIST_PATHS 各字段按序>, vbus, ibus)
 # worker 轮询与 GUI 曲线共用此定义,保证行结构单一来源
 HIST_PATHS = {
@@ -95,3 +97,64 @@ def decode_error(mask, table):
 
 def state_name(num):
     return AXIS_STATE.get(num, str(num))
+
+
+# ---- 异常翻译(odrive/fibre 抛的是英文异常,界面统一显示中文) ----
+
+ERR_TYPE_ZH = {
+    "TransportException": "通信异常",
+    "DeviceLostException": "设备已断开",
+    "DeviceTimeoutError": "设备响应超时",
+    "DeviceStateException": "设备状态异常",
+    "DeviceException": "设备异常",
+    "NotConnectableException": "设备无法连接",
+    "CouldNotClaimInterfaceException": "USB 接口被占用",
+    "TimeoutError": "等待超时",
+    "AssertionError": "断言失败",
+    "PermissionError": "权限不足",
+    "FileNotFoundError": "文件不存在",
+    "IsADirectoryError": "目标是目录",
+    "OSError": "系统错误",
+    "JSONDecodeError": "JSON 格式错误",
+    "UnicodeDecodeError": "文件编码错误(需要 UTF-8)",
+}
+
+_ERR_MSG_ZH = (
+    (r"Transport error on device (\S+)",
+     "与设备 %s 通信失败(可能正在重启或已掉线)"),
+    (r"Device (\S+) not found", "未找到设备 %s"),
+    (r"Device (\S+) disconnected", "设备 %s 已断开"),
+    (r"Device failed with (.*)", "设备故障: %s"),
+    (r"Device returned (.*)", "设备返回: %s"),
+    (r"Device entered IDLE for an unknown reason\.?",
+     "设备原因不明地回到了 IDLE"),
+    (r"No ODrive found\.?", "未找到 ODrive 设备"),
+    (r".*device is in use by another program.*",
+     "设备被其它程序占用(关掉 odrivetool / Web GUI / 其它脚本)"),
+    (r".*Could not claim interface.*",
+     "无法占用 USB 接口(可能被其它程序占用)"),
+    (r".*[Pp]ermission denied.*", "权限不足"),
+    (r"Expecting value.*", "内容为空或不是有效的 JSON"),
+    (r".*No such file or directory.*", "文件或目录不存在"),
+)
+
+
+def friendly_error(e):
+    """把异常翻译成中文提示(无法识别的部分保留原文,便于排查)。"""
+    if isinstance(e, AssertionError):
+        return "设备被其它程序占用(关掉 odrivetool / Web GUI / 其它脚本)"
+    msg = str(e).strip()
+    if msg:
+        for pat, rep in _ERR_MSG_ZH:
+            m = re.fullmatch(pat, msg, re.DOTALL)
+            if m:
+                try:
+                    return rep % m.groups() if m.groups() else rep
+                except TypeError:
+                    return rep
+    label = ERR_TYPE_ZH.get(type(e).__name__)
+    if label and msg:
+        return "%s: %s" % (label, msg)
+    if label:
+        return label
+    return "%s: %s" % (type(e).__name__, msg) if msg else type(e).__name__

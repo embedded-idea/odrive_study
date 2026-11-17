@@ -5,15 +5,16 @@
 """
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QLineEdit, QPlainTextEdit, QPushButton, QHBoxLayout, QVBoxLayout, QWidget,
 )
 
 from ..device import (
     AXIS_ERR, CTRL_ERR, ENC_ERR, MOTOR_ERR, ODRV_ERR, decode_error,
+    friendly_error,
 )
-from .theme import tag
+from .theme import mono_font, tag
 
 ERR_TABLES = {
     "error": ODRV_ERR,
@@ -53,13 +54,13 @@ class Terminal(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         self.out = QPlainTextEdit()
         self.out.setReadOnly(True)
-        self.out.setFont(QFont("Consolas, monospace"))
-        self.out.setStyleSheet("QPlainTextEdit{font-family:Consolas,monospace;font-size:12px;}")
+        self.out.setFont(mono_font(12))
+        self.out.setStyleSheet("QPlainTextEdit{font-size:12px;}")
         lay.addWidget(self.out, 1)
 
         bar = QHBoxLayout()
         self.prompt = QLineEdit()
-        self.prompt.setFont(QFont("Consolas, monospace"))
+        self.prompt.setFont(mono_font(12))
         self.prompt.setPlaceholderText("输入命令,回车执行(help 查看帮助)")
         btn = QPushButton("发送")
         tag(btn, "primary")
@@ -94,7 +95,7 @@ class Terminal(QWidget):
         try:
             self._exec(line)
         except Exception as e:
-            self.print("[err] %s: %s" % (type(e).__name__, e))
+            self.print("[err] %s" % friendly_error(e))
 
     def _exec(self, line):
         low = line.lower()

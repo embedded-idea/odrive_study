@@ -1,8 +1,8 @@
 """OdrvStudio - 设备工作区(照搬 SimpleFOCStudio-zh 的 deviceConfigurationTool 布局)。
 
-第一行横排: [DRO 数字读出 | 控制环 | 力矩控制 | 连接控制]
+第一行横排: [DRO 数字读出 | 控制环 | 连接控制]
 第二行:     实时曲线 (graphicWidget)
-第三行横排: [PID 调参 | 通用控制 + 通用设置 | 命令行 + 点动/设定值]
+第三行横排: [PID 调参 | 通用控制 + 通用设置 | 命令行 + 设定值(速度/位置/力矩)]
 """
 
 import time
@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget,
 )
 
-from .control_panel import ControlLoopBox, GeneralControlsBox, JogControlBox, TorqueBox
+from .control_panel import ControlLoopBox, GeneralControlsBox, SetpointBox
 from .monitor import DROWidget, MonitorWidget
 from .motor_id_panel import MotorParamPanel
 from .pid_panel import PidPanel
@@ -200,10 +200,8 @@ class WorkArea(QWidget):
         r1.addWidget(box_dro, 3)
 
         self.loop = ControlLoopBox(worker)
-        r1.addWidget(self.loop, 2)
-
-        self.torque = TorqueBox(worker)
-        r1.addWidget(self.torque, 2)
+        self.loop.modeChanged.connect(self._apply_mode)
+        r1.addWidget(self.loop, 3)
 
         self.conn = ConnectionControlBox(worker)
         r1.addWidget(self.conn, 3)
@@ -242,7 +240,8 @@ class WorkArea(QWidget):
         c3.setContentsMargins(0, 0, 0, 0)
         c3.setSpacing(4)
         self.terminal = Terminal(worker)
-        self.jog = JogControlBox(worker)
+        self.jog = SetpointBox(worker)
+        self.torque = self.jog    # 兼容旧引用(力矩行已并入设定值面板)
         c3.addWidget(self.terminal, 1)
         c3.addWidget(self.jog)
         r3.addWidget(col3, 3)
@@ -251,9 +250,22 @@ class WorkArea(QWidget):
         split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
         split.setStretchFactor(2, 0)
-        split.setSizes([100, 520, 310])
+        split.setSizes([100, 460, 360])
 
         self.conn.axis_combo.currentIndexChanged.connect(self._on_axis_changed)
+
+        # 按控制模式启用对应的设定值控件(速度/位置/力矩)
+        self._applied_mode = None
+        self._apply_mode(self.loop.current_mode())
+
+    # ---- 控制模式 ----
+
+    def _apply_mode(self, mode):
+        """把模式同步到“力矩控制”和“点动/设定值”两个面板。"""
+        if mode == self._applied_mode:
+            return
+        self._applied_mode = mode
+        self.jog.set_mode(mode)
 
     # ---- 轴管理 ----
 
@@ -268,11 +280,14 @@ class WorkArea(QWidget):
             axis = 0
         self.dro.set_axis(axis)
         self.loop.set_axis(axis)
-        self.torque.set_axis(axis)
         self.pid.set_axis(axis)
         self.jog.set_axis(axis)
         self.settings.set_axis(axis)
         self.motor_id.set_axis(axis)
+        mode = self.worker.snapshot.get(
+            "axis%d.controller.config.control_mode" % axis)
+        self._apply_mode(mode if isinstance(mode, int)
+                         else self.loop.current_mode())
         self.axisChanged.emit(axis)
 
     @property
@@ -304,6 +319,10 @@ class WorkArea(QWidget):
     def update_state(self, snap):
         self.dro.update_state(snap)
         self.loop.update_state(snap)
+        mode = snap.get("axis%d.controller.config.control_mode" % self.axis)
+        if isinstance(mode, int):
+            self._apply_mode(mode)     # 终端/别处改了模式也跟着切
         self.general.update_state(snap)
         self.settings.update_state(snap)
+        self.jog.update_state(snap)
         self.monitor.update_data(self.worker.hist, self.monitor.btn_pause.isChecked())

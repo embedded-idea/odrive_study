@@ -13,7 +13,7 @@ from collections import deque
 import odrive
 
 from .device import (AXIS_STATE, BASE_FIELDS, HIST_PATHS,
-                     OPTIONAL_FAST_SUFFIXES, make_hist_row)
+                     OPTIONAL_FAST_SUFFIXES, friendly_error, make_hist_row)
 
 HIST_FIELDS = ("t",) + tuple(HIST_PATHS) + ("vbus", "ibus")
 HIST_WINDOW_S = 60
@@ -31,6 +31,23 @@ COMMON_SLOW = [
 
 ERR_PATHS = ["error"]  # 轴错误路径按轴追加
 
+# 保存/重启后设备会主动断开 USB,这些异常属于预期,不算操作失败
+_LOST_ERROR_NAMES = {
+    "TransportException", "DeviceLostException", "DeviceTimeoutError",
+    "TimeoutError", "OSError",
+}
+
+ACTION_ZH = {
+    "estop": "急停", "start": "进入闭环", "stop": "停止",
+    "cal_motor": "电机标定", "cal_encoder": "编码器标定",
+    "clear_errors": "清除错误", "save": "保存配置", "reboot": "重启",
+}
+
+
+def _is_lost_error(e):
+    """掉线/重启导致的通信异常(不是真的操作失败)。"""
+    return type(e).__name__ in _LOST_ERROR_NAMES
+
 
 def _axis_slow_paths(a):
     """单个轴的慢速轮询路径(1 Hz;相电流/Vq/Vd 已挪到 fast)。"""
@@ -43,6 +60,11 @@ def _axis_slow_paths(a):
         "axis%d.config.enable_sensorless_mode" % a,
         "axis%d.encoder.config.pre_calibrated" % a,
         "axis%d.controller.config.control_mode" % a,
+        # GUI 设定值范围:速度上限与力矩上限(供 Jog/Torque 面板自适应)
+        "axis%d.controller.config.vel_limit" % a,
+        "axis%d.motor.config.current_lim" % a,
+        "axis%d.motor.config.torque_constant" % a,
+        "axis%d.motor.config.motor_type" % a,
         "axis%d.controller.input_vel" % a,
         "axis%d.controller.input_pos" % a,
         "axis%d.controller.input_torque" % a,
@@ -78,6 +100,7 @@ class DeviceWorker(threading.Thread):
         self._reconnect_wanted = False
         self._reconnect_due = 0.0
         self._reconnect_attempt = 0
+        self._last_reconnect_err = ""
 
         # 连续录制(边采边写 CSV)
         self.recording = False
@@ -177,7 +200,7 @@ class DeviceWorker(threading.Thread):
                 try:
                     self._poll()
                 except Exception as e:  # 设备掉线等
-                    self._on_lost("%s: %s" % (type(e).__name__, e))
+                    self._on_lost(friendly_error(e))
             elif (self._reconnect_wanted and not self.connecting
                   and time.monotonic() >= self._reconnect_due):
                 self._try_reconnect()
@@ -221,7 +244,7 @@ class DeviceWorker(threading.Thread):
                 elif kind == "sweep":
                     self._do_sweep(cmd[1])
             except Exception as e:
-                self._emit("log", "[err] %s: %s" % (type(e).__name__, e))
+                self._emit("log", "[err] %s" % friendly_error(e))
 
     # ---- 连接管理 ----
 
@@ -268,9 +291,14 @@ class DeviceWorker(threading.Thread):
         except Exception as e:
             self.dev = None
             self.axes = [0]
-            self.last_error = _friendly_err(e)
+            self.last_error = friendly_error(e)
             if quiet:
-                self._emit("log", "[重连] 等待设备中(%s)" % self.last_error)
+                # 每 2 s 尝试一次,日志不要刷屏:错误变化或每 5 次才提示
+                if (self._reconnect_attempt <= 1
+                        or self._reconnect_attempt % 5 == 0
+                        or self.last_error != self._last_reconnect_err):
+                    self._emit("log", "[重连] 等待设备中: %s" % self.last_error)
+                self._last_reconnect_err = self.last_error
             else:
                 self._emit("connect_failed", self.last_error)
             return False
@@ -403,7 +431,7 @@ class DeviceWorker(threading.Thread):
                 f.flush()
         except Exception as e:
             self._rec_close()
-            self._emit("log", "[录制] 写入失败,已停止: %s" % e)
+            self._emit("log", "[录制] 写入失败,已停止: %s" % friendly_error(e))
             self._emit("recording", False, "")
 
     def _rec_close(self):
@@ -423,7 +451,7 @@ class DeviceWorker(threading.Thread):
         try:
             f = open(path, "w", encoding="utf-8", newline="")
         except Exception as e:
-            self._emit("log", "[录制] 打开文件失败: %s" % e)
+            self._emit("log", "[录制] 打开文件失败: %s" % friendly_error(e))
             return
         f.write(self._rec_header(self.axes))
         self._rec = f
@@ -486,7 +514,7 @@ class DeviceWorker(threading.Thread):
                 self.dev.wr(in_path, 0.0)
             except Exception:
                 pass
-            self._emit("log", "[扫频] 失败: %s: %s" % (type(e).__name__, e))
+            self._emit("log", "[扫频] 失败: %s" % friendly_error(e))
         finally:
             self._sweep_active = False
             self._sweep_cancel = False
@@ -569,7 +597,7 @@ class DeviceWorker(threading.Thread):
                 self.snapshot[path] = value   # DRO/显示立即反映
             self._emit("wr_done", path, True, "")
         except Exception as e:
-            self._emit("wr_done", path, False, "%s: %s" % (type(e).__name__, e))
+            self._emit("wr_done", path, False, friendly_error(e))
 
     def _do_rd(self, req_id, paths):
         if not self._ensure_dev("rd"):
@@ -580,13 +608,14 @@ class DeviceWorker(threading.Thread):
             try:
                 out[p] = self.dev.rd(p)
             except Exception as e:
-                out[p] = "<%s>" % e
+                out[p] = "<%s>" % friendly_error(e)
         self._emit("rd_result", req_id, out)
 
     def _ensure_dev(self, what):
         if self.connected and self.dev is not None:
             return True
-        self._emit("log", "[err] 未连接设备,忽略 %s" % what)
+        label = ACTION_ZH.get(what) or {"wr": "写入", "rd": "读取"}.get(what, what)
+        self._emit("log", "[err] 未连接设备,忽略%s" % label)
         return False
 
     # ---- 动作 ----
@@ -621,17 +650,27 @@ class DeviceWorker(threading.Thread):
                         d.wr(p, 0)
                     except Exception:
                         pass
-            elif name == "save":
-                d.raw.save_configuration()
-                self._emit("log", "[ok] 已保存,设备重启中(WSL 下可能需要重新 usbipd attach)")
-            elif name == "reboot":
-                d.raw.reboot()
+            elif name in ("save", "reboot"):
+                fn = (d.raw.save_configuration if name == "save"
+                      else d.raw.reboot)
+                try:
+                    fn()
+                except Exception as e:
+                    if not _is_lost_error(e):
+                        raise       # 真正的失败;掉线是重启的预期结果
+                self._emit("log", "[ok] %s,设备重启中(等待自动重连;"
+                                  "WSL 下可能需要重新 usbipd attach)"
+                           % ("已保存" if name == "save" else "已重启"))
+                self._on_lost("设备重启中")
+                self._emit("action_done", name)
+                return
             else:
                 self._emit("log", "[err] 未知动作 %s" % name)
                 return
             self._emit("action_done", name)
         except Exception as e:
-            self._emit("log", "[err] %s 失败: %s: %s" % (name, type(e).__name__, e))
+            self._emit("log", "[err] %s 失败: %s"
+                       % (ACTION_ZH.get(name, name), friendly_error(e)))
 
     @staticmethod
     def _axis_start(d, a):
@@ -682,12 +721,6 @@ class _DeviceAdapter:
                     return
                 except Exception:
                     return
-
-
-def _friendly_err(e):
-    if isinstance(e, AssertionError):
-        return "设备被其它程序占用(关掉 odrivetool / Web GUI / 其它脚本)"
-    return "%s: %s" % (type(e).__name__, e)
 
 
 def state_name(num):

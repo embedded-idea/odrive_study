@@ -9,8 +9,25 @@
 标签页 = 下划线指示器。曲线绘图区按 SFS 惯例保持黑底。
 """
 
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import QApplication
+
+# 按可用性选择的中文字体(WSL 里常见的是 Windows 字体目录)
+_CJK_FAMILIES = (
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    "Noto Sans SC",
+    "Source Han Sans SC",
+    "WenQuanYi Micro Hei",
+    "SimHei",
+    "Droid Sans Fallback",
+)
+_MONO_FAMILIES = (
+    "Consolas",
+    "Cascadia Mono",
+    "DejaVu Sans Mono",
+    "Liberation Mono",
+)
 
 # ---- 调色板(供代码内取色) ----
 BG = "#FAFAFA"          # 页面背景
@@ -182,14 +199,39 @@ QToolTip {
 """
 
 
+def ui_font(point_size=9):
+    """返回当前系统实际可用的中文字体,并带一组回退族。
+
+    原来硬编码 "Noto Sans CJK SC",在没装该字体的机器上(例如 WSL)会
+    回落到 DejaVu,中文全部变成方块/乱码;这里按可用性挑选。
+    """
+    installed = set(QFontDatabase.families())
+    families = [name for name in _CJK_FAMILIES if name in installed]
+    f = QFont(families[0] if families else QFont().family())
+    if families:
+        f.setFamilies(families)
+    f.setPointSize(point_size)
+    return f
+
+
+def mono_font(point_size=9):
+    """等宽字体(终端/代码预览),回退族里带中文字体,保证中文能显示。"""
+    installed = set(QFontDatabase.families())
+    families = [name for name in _MONO_FAMILIES if name in installed]
+    f = QFont(families[0]) if families else QFontDatabase.systemFont(
+        QFontDatabase.FixedFont)
+    fallback = ui_font().family()
+    f.setFamilies(families + [fallback] if families else [f.family(), fallback])
+    f.setPointSize(point_size)
+    return f
+
+
 def apply_material_theme(app):
     """QApplication 全局 Material 样式 + 字体。"""
     if not isinstance(app, QApplication):
         return
     app.setStyle("Fusion")
-    f = QFont("Noto Sans CJK SC")
-    f.setPointSize(9)
-    app.setFont(f)
+    app.setFont(ui_font(9))
     app.setStyleSheet(_QSS)
 
 

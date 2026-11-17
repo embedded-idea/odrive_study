@@ -135,16 +135,19 @@ def stage2():
     QFileDialog.getOpenFileName = staticmethod(lambda *a, **k: (snap_path, ""))
     cfg.load_snapshot()
     cfg.map_combo.setCurrentIndex(2)          # axis1 → axis0
-    cfg.apply_snapshot()
     # CSV 导出(通用设置按钮)
     QFileDialog.getSaveFileName = staticmethod(lambda *a, **k: (csv_path, ""))
     win.work.settings.btn_csv.click()
-    # 急停(全轴, 通用控制按钮)
+    # 急停(全轴, 通用控制按钮)—— 要在 save 之前:save 会重启设备并断开连接
     win.work.general.btn_estop.click()
+    cfg.apply_snapshot()
 
 
 def stage3():
     cfg = win.config
+    # save 会让设备重启并断开连接:真实场景由自动重连完成,这里主动触发一次
+    if not worker.connected:
+        worker.connect_req(timeout=1)
     check(any(p.startswith("axis0.controller.config.")
               for p in fake.writes), "apply wrote axis0 paths (remapped)")
     check(fake.writes.get("axis0.controller.config.vel_gain") == 1.5,
@@ -181,6 +184,37 @@ def stage3():
     win.add_device_form()
     check(win.work is not None and win.tabs.indexOf(win.work) >= 0,
           "device tab re-added")
+    # 控制模式联动:位置/力矩/速度各自启用对应的设定值控件
+    loop = win.work.loop
+    loop.mode_combo.setCurrentIndex(1)          # 位置模式
+    check(abs(win.work.jog.pos_spin.value() - 1.5) < 1e-6,
+          "position mode prefills current pos: %g"
+          % win.work.jog.pos_spin.value())
+    win.work.jog.pos_spin.setValue(0.5)         # 0.5 turn = 180°
+    check("180.0°" in win.work.jog.lab_pos_deg.text(),
+          "position degrees hint: %s" % win.work.jog.lab_pos_deg.text())
+    # 单位切换:turn ↔ 度,物理目标不变;度输入写回时换算成 turn
+    win.work.jog.pos_unit.setCurrentIndex(1)
+    check(abs(win.work.jog.pos_spin.value() - 180.0) < 0.05,
+          "unit switched to degrees: %g" % win.work.jog.pos_spin.value())
+    win.work.jog.pos_spin.setValue(90.0)        # 90° = 0.25 turn
+    win.work.jog.btn_pos_abs.click()
+    win.work.jog.pos_unit.setCurrentIndex(0)
+    check(abs(win.work.jog.pos_spin.value() - 0.25) < 1e-6,
+          "unit switched back to turns: %g" % win.work.jog.pos_spin.value())
+    check(win.work.jog.pos_spin.isEnabled()
+          and not win.work.jog.vel_spin.isEnabled()
+          and not win.work.torque.torque_spin.isEnabled(),
+          "position mode: pos inputs on, others off")
+    loop.mode_combo.setCurrentIndex(2)          # 力矩模式
+    check(win.work.torque.torque_spin.isEnabled()
+          and not win.work.jog.pos_spin.isEnabled()
+          and not win.work.jog.vel_spin.isEnabled(),
+          "torque mode: torque input on")
+    loop.mode_combo.setCurrentIndex(0)          # 回速度模式(扫频需要)
+    check(win.work.jog.vel_spin.isEnabled()
+          and not win.work.torque.torque_spin.isEnabled(),
+          "velocity mode: vel inputs on")
     # 勾选"相电流" → 应开始轮询 ia/ib/ic(异步,stage4 验证)
     win.work.monitor._checks["相电流"][0].setChecked(True)
     # 速度扫频(短: 2 个频点 × 1 周期,约 0.3s)
@@ -195,6 +229,21 @@ def stage3():
 
 
 def stage4():
+    # 模式切换写入(异步):最终回到速度模式,输入方式为 PASSTHROUGH
+    check(fake.writes.get("axis0.controller.config.control_mode") == 2,
+          "control_mode switched via UI")
+    check(fake.writes.get("axis0.controller.config.input_mode") == 1,
+          "input_mode set to passthrough")
+    check(abs(fake.writes.get("axis0.controller.input_pos", 0) - 0.25) < 1e-6,
+          "degree input converted to turns: %s"
+          % fake.writes.get("axis0.controller.input_pos"))
+    # 工具侧不限幅:速度/位置/力矩输入框都接受任意大值
+    check(win.work.jog.vel_spin.maximum() >= 1e8,
+          "vel spin unlimited: %g" % win.work.jog.vel_spin.maximum())
+    check(win.work.torque.torque_spin.maximum() >= 1e8,
+          "torque spin unlimited: %g" % win.work.torque.torque_spin.maximum())
+    check(win.work.jog.pos_spin.maximum() >= 1e8,
+          "pos spin unlimited: %g" % win.work.jog.pos_spin.maximum())
     # 扫频结果 → Bode 标签页
     check(win.bode is not None, "bode tab opened")
     if win.bode is not None and win.bode._data:

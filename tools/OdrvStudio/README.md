@@ -31,16 +31,35 @@ PYTHONPATH=tools ~/.odrive-venv/bin/python -m OdrvStudio
 
 WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 
+**中文乱码/方块**:WSL 默认没有中文字体,Qt 会回落到 DejaVu(无 CJK 字形)。
+把 Windows 字体目录注册给 fontconfig 即可(无需 sudo):
+
+```xml
+<!-- ~/.config/fontconfig/fonts.conf -->
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>/mnt/c/Windows/Fonts</dir>
+</fontconfig>
+```
+
+```bash
+fc-cache -f && fc-match "Microsoft YaHei"   # 应输出 msyh.ttc
+```
+
+主题会按可用性自动挑选 `Microsoft YaHei` / `Noto Sans CJK SC` / `SimHei`
+等字体(见 `gui/theme.py` 的 `ui_font()`),终端和代码预览用 `mono_font()`。
+
 ## 界面布局(照搬 SimpleFOCStudio-zh formview)
 
 ```
 ┌ 工具栏: [设备+(树形/表格视图)] [打开] [保存] [生成代码] │ [命令行交互] │ [急停] [关于] ┐
 ├ 标签页(可关闭/可拖动): [设备 — ODrive v3.6 56V] [设备(树形视图)] [生成代码] [命令行交互] ┤
 │ ┌ 设备页(deviceConfigurationTool 布局,三段垂直可拖动) ─────────────────────┐ │
-│ │ [DRO 数码管(位置/速度/Iq/目标) | 控制环模式▾ | 力矩控制 | 连接控制]      │ │
+│ │ [DRO 数码管(位置/速度/Iq/目标) | 控制环模式▾ | 连接控制]                │ │
 │ │ 实时电机变量: 单块黑色曲线 + 图例(目标/速度/位置/电流,双轴同屏)         │ │
 │ │ [停止|暂停|View all + 曲线显隐复选框 + Downsample]                       │ │
-│ │ [PID 控制器配置(选择环▾+参数行+阶跃测试) | 通用控制+通用设置 | 命令行+点动] │ │
+│ │ [PID 控制器配置 | 通用控制+通用设置 | 命令行+设定值(速度/位置/力矩)]     │ │
 │ └──────────────────────────────────────────────────────────────────────────┘ │
 ├ 状态栏: 固件版本 │ 错误摘要 ─────────────────────────────────────────────────────┤
 ```
@@ -67,6 +86,36 @@ WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 - **生成代码**:读取设备配置 → odrivetool 风格初始化脚本标签页
 - **命令行交互**:独立的全功能终端标签页(设备页第三行还内嵌了一个精简终端)
 
+## 控制模式与可设参数
+
+“控制环模式”下拉框切换 `controller.config.control_mode`,切换时 GUI 会先把
+新模式的设定值置为安全值(速度=0、力矩=0、位置=当前位置),并把
+`controller.config.input_mode` 写回 `PASSTHROUGH`(1),避免带着旧设定值跳变。
+面板会按模式自动启用/禁用对应输入:
+
+| 模式 | 设定值(必设) | 相关参数 | GUI 位置 |
+|---|---|---|---|
+| 速度 `control_mode=2` | `controller.input_vel` [turn/s] | `config.vel_limit`、`vel_gain`、`vel_integrator_gain`、`input_mode`(1/2 平滑) | 设定值面板 → 速度行(工具侧不限幅) |
+| 位置 `control_mode=3` | `controller.input_pos` [turn] | `pos_gain`、`vel_limit`、`vel_gain`、`input_filter_bandwidth`(POS_FILTER 时) | 设定值面板 → 位置行(单位可切 turn / 度,绝对/相对 ±,下方同时显示 turn 与角度) |
+| 力矩 `control_mode=1` | `controller.input_torque` [Nm] | `motor.config.torque_constant`、`controller.config.current_lim` | 设定值面板 → 力矩行(工具侧不限幅) |
+
+**工具侧不做任何限幅**:速度/力矩/位置输入框接受任意值,写入前不再
+clamp,也不再按 `vel_limit` / `current_lim` 自动改范围;大幅绝对位置移动
+不再弹确认框。固件本身的保护仍然生效(母线电压、`0.98/√3×Vbus` 电压上限、
+过流/过温),超出物理能力的指令只会被固件裁掉。
+
+位置模式的 `input_pos` 是**绝对**位置(圈,从编码器计数原点算起)。如果电机
+已经连续转过很久,`encoder.pos_estimate` 可能累计到几千圈,此时直接填 `1`
+会变成“从 3800 多圈转回 1 圈”的长距离移动(看起来像一直转)。设定值面板会
+显示当前位置,点“取当前”可先对齐。位置输入单位可切换 **turn / 度**,
+换算关系 `input_pos[turn] = 角度[°] / 360`;切单位只改显示,物理目标不变。
+只想“再转 1 圈”请用 **相对 + 1**(内部读 `pos_estimate` 后写 `pos + 1`)。
+
+通用参数(与模式无关):`current_lim`(云台电压模式下 `motor.config.current_lim`
+是**电压**上限)、`vel_limit`、各环增益、`motor.config.pre_calibrated`、
+`encoder.config.pre_calibrated`。任意属性都可以在“设备(树形视图)”参数树或
+命令行里读写,写入 `.config.*` 前会二次确认。
+
 ## 可靠性 / 安全(ODrive 特有)
 
 - **掉线自动重连**:USB 掉线(如 WSL 下 save 后 usbipd 分离)后按序列号
@@ -86,7 +135,7 @@ WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 | DRO 数码管 | droDisplayWidget | 位置/速度/Iq/目标 四个七段数码管 + 状态/Vbus/Ibus 小字;目标随控制模式自动切换 |
 | 实时曲线 | graphicWidget | 单块黑色图 + 图例:目标/速度/位置/电流/积分器 + **相电流 Ia/Ib/Ic + Vq/Vd(默认隐藏)** + Vbus/Ibus 虚线;**双轴同屏对比**;停止/暂停/View all/曲线显隐/Downsample |
 | 控制环模式 + 力矩 | controlLoopConfig / torqueConfig | 模式下拉(速度/位置/力矩)、input_torque 设定、current_lim 限幅 |
-| 点动 / 设定值 | deviceJoggingControl | 速度设定+快捷档位、点动(按住生效)、位置绝对/相对 |
+| 设定值面板 | torqueConfig + deviceJoggingControl | 速度/位置/力矩三种设定值集中在一处:速度+快捷档位+点动(按住生效)、位置绝对/相对(带角度换算)、力矩;按控制模式启用对应行,范围自动跟随 `vel_limit` / `current_lim×torque_constant` |
 | 通用控制 | generalControls | 进入闭环/回 IDLE、电机/编码器标定、保存配置、清除错误、全轴急停 |
 | 通用设置 | generalSettingsWidget | 电流限幅、曲线清空/导出 CSV、连续录制(边采边写) |
 | 电机参数识别 | (新增) | 一键自动标定:记录旧配置 → 写校准参数(电机类型/校准电流/**按 R×I 自动建议校准电压**)→ 电机标定并跟踪进度 → 实测相电阻/相电感与旧配置对比(τ=L/R、KV 换算、**R>1Ω 建议云台类型**)→ 一键"应用实测值"(写 R/L + pre_calibrated,下次跳过电机校准) |
