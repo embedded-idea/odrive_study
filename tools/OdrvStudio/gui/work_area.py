@@ -7,8 +7,8 @@
 
 import time
 
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget,
 )
@@ -173,7 +173,7 @@ class GeneralSettingsBox(QGroupBox):
 class WorkArea(QWidget):
     """设备页(SimpleFOCStudio-zh 表格视图布局)。"""
 
-    axisChanged = pyqtSignal(int)
+    axisChanged = Signal(int)
 
     def __init__(self, worker, spec_roots, parent=None):
         super().__init__(parent)

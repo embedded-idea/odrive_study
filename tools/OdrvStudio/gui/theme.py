@@ -9,8 +9,8 @@
 标签页 = 下划线指示器。曲线绘图区按 SFS 惯例保持黑底。
 """
 
-from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QApplication
 
 # ---- 调色板(供代码内取色) ----
 BG = "#FAFAFA"          # 页面背景

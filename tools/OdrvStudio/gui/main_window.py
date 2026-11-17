@@ -4,10 +4,10 @@
 中央可关闭/可拖动的多标签工作区,底部状态栏。
 """
 
-from PyQt5.QtCore import Qt, QTimer, QSize
-from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import (
-    QAction, QLabel, QMainWindow, QMenu, QShortcut, QStyle, QTabWidget,
+from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtWidgets import (
+    QLabel, QMainWindow, QMenu, QStyle, QTabWidget,
     QToolBar, QToolButton,
 )
 
@@ -145,11 +145,11 @@ class MainWindow(QMainWindow):
         tb.addAction(act_about)
 
     def _about(self):
-        from PyQt5.QtWidgets import QMessageBox
+        from PySide6.QtWidgets import QMessageBox
         QMessageBox.about(
             self, "关于 OdrvStudio",
             "OdrvStudio v%s\n参考 SimpleFOCStudio-zh 布局的 ODrive 调试工作台\n"
-            "PyQt5 + PyQtGraph | ODrive v3.6 (56V) + 2804 + AS5047P\n"
+            "PySide6 + PyQtGraph | ODrive v3.6 (56V) + 2804 + AS5047P\n"
             "双轴支持 | 代码生成 | 配置快照 | CSV 导出" % __version__)
 
     # ---- 标签页管理(workAreaTabbedWidget 风格) ----

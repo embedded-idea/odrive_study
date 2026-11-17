@@ -6,8 +6,8 @@
 
 import re
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
     QInputDialog, QLineEdit, QMessageBox, QPushButton, QTreeWidget,
     QTreeWidgetItem, QVBoxLayout, QWidget,
 )
@@ -63,7 +63,7 @@ class ParamTree(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         bar = lay  # 工具行
-        from PyQt5.QtWidgets import QHBoxLayout
+        from PySide6.QtWidgets import QHBoxLayout
         tools = QHBoxLayout()
         self.btn_refresh = QPushButton("刷新可见值")
         self.btn_collapse = QPushButton("全部收起")

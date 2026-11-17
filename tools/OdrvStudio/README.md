@@ -2,7 +2,7 @@
 
 参考 [SimpleFOCStudio-zh](https://github.com/Deego-Robotics/SimpleFOCStudio-zh)
 (即 SimpleFOCStudio 中文版)的界面与架构开发的 ODrive 桌面调试工作台
-(PyQt5 + PyQtGraph),针对 ODrive v3.6(含 56V 版本)+ 2804 云台电机 +
+(PySide6 + PyQtGraph),针对 ODrive v3.6(含 56V 版本)+ 2804 云台电机 +
 AS5047P 适配,支持双轴。
 
 主题为 **Flutter(Material)浅色风格**(见 `gui/theme.py`):卡片式分组、
@@ -23,7 +23,7 @@ PYTHONPATH=tools ~/.odrive-venv/bin/python -m OdrvStudio
 ```
 
 依赖(已装入 `~/.odrive-venv`,见本目录 `requirements.txt`):
-`odrive`、`PyQt5`、`pyqtgraph`、`PyYAML`(其余为 odrive 包的传递依赖)。
+`odrive`、`PySide6`、`pyqtgraph`、`PyYAML`(其余为 odrive 包的传递依赖)。
 
 ```bash
 ~/.odrive-venv/bin/pip install -r tools/OdrvStudio/requirements.txt

@@ -8,9 +8,10 @@ DRO: 角度/速度/电流/目标 四个七段数码管(QLCDNumber)+ 状态/母�
 import time
 
 import pyqtgraph as pg
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
-    QCheckBox, QFileDialog, QHBoxLayout, QLabel, QLCDNumber,
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QPen
+from PySide6.QtWidgets import (
+    QCheckBox, QFileDialog, QGraphicsItem, QHBoxLayout, QLabel, QLCDNumber,
     QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
@@ -57,10 +58,66 @@ CURVE_GROUPS = [
 GROUP_DEFAULT_ON = {"目标", "速度", "位置", "电流", "积分"}
 
 
+class ScopeGrid(QGraphicsItem):
+    """示波器式固定分度网格:10×10 大格(实线),每格 5 小格(虚线),中心十字加亮。
+
+    固定分度不随缩放变化(真示波器的格子与数据无关),曲线画在网格之上。
+    """
+
+    MAJOR = 10
+    MINOR = 5
+
+    def __init__(self):
+        super().__init__()
+        self._rect = QRectF()
+        self.setZValue(-100)   # 曲线之下、黑底之上
+
+    def set_rect(self, r):
+        self._rect = QRectF(r)
+        self.prepareGeometryChange()
+        self.update()
+
+    def boundingRect(self):
+        return QRectF(self._rect)
+
+    def paint(self, p, *_args):
+        if self._rect.isNull():
+            return
+        r = self._rect
+        w, h = r.width(), r.height()
+        n_major = self.MAJOR
+        n_minor = self.MAJOR * self.MINOR
+
+        def pen(alpha, style=Qt.SolidLine):
+            q = QPen(QColor(200, 204, 212, alpha))
+            q.setCosmetic(True)   # 像素宽度,不随视图缩放
+            q.setStyle(style)
+            return q
+
+        major = pen(60)
+        minor = pen(26, Qt.DotLine)
+        center = pen(100, Qt.DashLine)
+        for i in range(1, n_major):
+            mid = (i == n_major // 2)
+            p.setPen(center if mid else major)
+            x = r.left() + w * i / n_major
+            p.drawLine(QPointF(x, r.top()), QPointF(x, r.bottom()))
+            y = r.top() + h * i / n_major
+            p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y))
+        p.setPen(minor)
+        for i in range(n_minor):
+            if i % self.MINOR == 0:
+                continue
+            x = r.left() + w * i / n_minor
+            p.drawLine(QPointF(x, r.top()), QPointF(x, r.bottom()))
+            y = r.top() + h * i / n_minor
+            p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y))
+
+
 class MonitorWidget(QWidget):
     """实时曲线:单块黑色图 + 图下控制行(照 SimpleFOCStudio-zh)。"""
 
-    stopRequested = pyqtSignal()
+    stopRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -78,6 +135,13 @@ class MonitorWidget(QWidget):
         self.plot.setLabel("bottom", "时间 [s]")
         self.plot.addLegend(offset=(8, 8), labelTextSize="8pt")
         self.plot.setMouseEnabled(x=True, y=True)
+        # 示波器网格: 固定 10×10 分度,随视图同步(缩放/平移保持不变)
+        self._vb = self.plot.getPlotItem().vb
+        self._scope_grid = ScopeGrid()
+        self._vb.addItem(self._scope_grid, ignoreBounds=True)
+        self._vb.sigRangeChanged.connect(lambda *_: self._sync_grid())
+        self._vb.sigResized.connect(self._sync_grid)
+        self._sync_grid()
         lay.addWidget(self.plot, 1)
 
         # ---- 图下控制行 ----
@@ -175,6 +239,12 @@ class MonitorWidget(QWidget):
     def _view_all(self):
         self.plot.enableAutoRange()
         self.plot.autoRange()
+
+    def _sync_grid(self):
+        """把示波器网格铺满当前视图范围(缩放/平移/改窗后调用)。"""
+        r = self._vb.viewRect()
+        if r is not None and not r.isNull():
+            self._scope_grid.set_rect(r)
 
     # ---- 数据 ----
 

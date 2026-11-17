@@ -16,8 +16,8 @@ os.environ["QT_QPA_PLATFORM"] = "offscreen"
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 import odrive  # noqa: E402
-from PyQt5.QtCore import QTimer  # noqa: E402
-from PyQt5.QtWidgets import QApplication, QFileDialog  # noqa: E402
+from PySide6.QtCore import QTimer  # noqa: E402
+from PySide6.QtWidgets import QApplication, QFileDialog  # noqa: E402
 
 from OdrvStudio.spec import build_index, load_spec  # noqa: E402
 from OdrvStudio.device_worker import DeviceWorker  # noqa: E402
@@ -291,7 +291,7 @@ QTimer.singleShot(4200, stage5)
 QTimer.singleShot(5200, stage6)
 QTimer.singleShot(6400, stage7)
 QTimer.singleShot(7000, stage8)
-rc = app.exec_()
+rc = app.exec()
 worker.stop()
 worker.join(1500)
 sys.exit(0 if rc == 0 and all(c for c, _ in results) else 1)

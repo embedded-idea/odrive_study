@@ -10,7 +10,7 @@ import os
 import time
 from collections import OrderedDict
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QGroupBox, QGridLayout, QHBoxLayout,
     QLabel, QApplication, QPushButton, QPlainTextEdit, QVBoxLayout,
     QWidget,

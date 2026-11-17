@@ -9,8 +9,8 @@
 
 import time
 
-from PyQt5.QtCore import QTimer
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout,
     QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )

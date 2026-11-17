@@ -9,7 +9,7 @@
 所有写操作都通过 worker 命令队列,不在 GUI 线程直接碰设备。
 """
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QPushButton,
 )
 

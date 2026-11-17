@@ -21,7 +21,7 @@ from OdrvStudio.spec import load_spec               # noqa: E402
 
 def create_app(argv):
     """QApplication + Flutter(Material)浅色主题。"""
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication(argv)
     from OdrvStudio.gui.theme import apply_material_theme
@@ -31,14 +31,14 @@ def create_app(argv):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="OdrvStudio - ODrive PyQt5 调试工作台")
+    ap = argparse.ArgumentParser(description="OdrvStudio - ODrive PySide6 调试工作台")
     ap.add_argument("--spec", default=None,
                     help="odrive-interface.yaml 路径(默认用仓库自带)")
     ap.add_argument("--poll-rate", type=int, default=20,
                     help="监控轮询频率 Hz(默认 20)")
     args = ap.parse_args(argv)
 
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = create_app(sys.argv or ["odrvstudio"])
 
@@ -49,7 +49,7 @@ def main(argv=None):
     win = MainWindow(worker, roots)
     win.show()
     worker.start()
-    rc = app.exec_()
+    rc = app.exec()
     worker.stop()
     worker.join(1500)
     return rc

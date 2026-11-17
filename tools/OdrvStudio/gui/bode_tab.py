@@ -3,7 +3,7 @@
 显示速度扫频的锁相分析结果: 幅频(dB) 与 相频(°) 曲线,X 轴对数。
 """
 
-from PyQt5.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 import pyqtgraph as pg
 
@@ -29,7 +29,7 @@ class BodeTab(QWidget):
         self.gain_plot.setLabel("bottom", "频率 [Hz]")
         self.gain_plot.setLabel("left", "增益 [dB]")
         self.gain_plot.setLogMode(x=True, y=False)
-        self.gain_plot.showGrid(x=True, y=True, alpha=0.3)
+        self.gain_plot.showGrid(x=True, y=True, alpha=0.55)
         lay.addWidget(self.gain_plot, 1)
 
         self.phase_plot = pg.PlotWidget()
@@ -38,7 +38,7 @@ class BodeTab(QWidget):
         self.phase_plot.setLabel("bottom", "频率 [Hz]")
         self.phase_plot.setLabel("left", "相位 [°]")
         self.phase_plot.setLogMode(x=True, y=False)
-        self.phase_plot.showGrid(x=True, y=True, alpha=0.3)
+        self.phase_plot.showGrid(x=True, y=True, alpha=0.55)
         lay.addWidget(self.phase_plot, 1)
 
         bar = QHBoxLayout()
@@ -78,7 +78,7 @@ class BodeTab(QWidget):
         self.lab_info.setText("已清空 — 重新扫频生成新数据。")
 
     def _export_csv(self):
-        from PyQt5.QtWidgets import QFileDialog
+        from PySide6.QtWidgets import QFileDialog
         if not self._data:
             return
         path, _ = QFileDialog.getSaveFileName(

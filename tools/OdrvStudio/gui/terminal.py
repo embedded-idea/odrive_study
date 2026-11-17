@@ -4,9 +4,9 @@
 直接读写任意属性 + 常用调试命令。
 """
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QTextCursor
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtWidgets import (
     QLineEdit, QPlainTextEdit, QPushButton, QHBoxLayout, QVBoxLayout, QWidget,
 )
 
