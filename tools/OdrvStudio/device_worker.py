@@ -12,16 +12,9 @@ from collections import deque
 
 import odrive
 
-from .device import AXIS_STATE
+from .device import (AXIS_STATE, BASE_FIELDS, HIST_PATHS,
+                     OPTIONAL_FAST_SUFFIXES, make_hist_row)
 
-# 曲线字段: hist 行 = (t, vel, vel_set, pos, iq, vel_int, vbus, ibus)
-HIST_PATHS = {
-    "vel": "encoder.vel_estimate",
-    "vel_set": "controller.vel_setpoint",
-    "pos": "encoder.pos_estimate",
-    "iq": "motor.current_control.Iq_measured",
-    "vel_int": "controller.vel_integrator_value",
-}
 HIST_FIELDS = ("t",) + tuple(HIST_PATHS) + ("vbus", "ibus")
 HIST_WINDOW_S = 60
 RECONNECT_DELAY_S = 2.0
@@ -39,25 +32,14 @@ COMMON_SLOW = [
 ERR_PATHS = ["error"]  # 轴错误路径按轴追加
 
 
-def _axis_paths(a):
-    """单个轴的轮询路径。"""
-    fast = [
-        "axis%d.current_state" % a,
-        "axis%d.encoder.vel_estimate" % a,
-        "axis%d.controller.vel_setpoint" % a,
-        "axis%d.encoder.pos_estimate" % a,
-        "axis%d.motor.current_control.Iq_measured" % a,
-        "axis%d.controller.vel_integrator_value" % a,   # 旧固件可能没有,见 _poll
-    ]
-    slow = [
+def _axis_slow_paths(a):
+    """单个轴的慢速轮询路径(1 Hz;相电流/Vq/Vd 已挪到 fast)。"""
+    return [
         "axis%d.error" % a,
         "axis%d.motor.error" % a,
         "axis%d.encoder.error" % a,
         "axis%d.controller.error" % a,
         "axis%d.encoder.pos_abs" % a,
-        "axis%d.motor.current_meas_phA" % a,
-        "axis%d.motor.current_meas_phB" % a,
-        "axis%d.motor.current_meas_phC" % a,
         "axis%d.config.enable_sensorless_mode" % a,
         "axis%d.encoder.config.pre_calibrated" % a,
         "axis%d.controller.config.control_mode" % a,
@@ -65,7 +47,6 @@ def _axis_paths(a):
         "axis%d.controller.input_pos" % a,
         "axis%d.controller.input_torque" % a,
     ]
-    return fast, slow
 
 
 class DeviceWorker(threading.Thread):
@@ -89,6 +70,7 @@ class DeviceWorker(threading.Thread):
         self.tick = 0
         self._fast_paths = []
         self._slow_paths = []
+        self._extra_fields = set()   # 按曲线显隐动态轮询的字段(相电流/电压)
 
         # 掉线自动重连(按序列号匹配;手动断开不触发)
         self.auto_reconnect = True
@@ -151,6 +133,10 @@ class DeviceWorker(threading.Thread):
 
     def set_auto_reconnect(self, on):
         self.post("set_auto_reconnect", bool(on))
+
+    def set_visible_req(self, fields):
+        """设置需要轮询的额外曲线字段(相电流/电压),如 {"ia","ib","ic"}。"""
+        self.post("set_extra", tuple(fields))
 
     def estop_req(self):
         """全轴急停;若正在扫频先中止(扫频会阻塞命令队列)。"""
@@ -223,6 +209,10 @@ class DeviceWorker(threading.Thread):
                     self.auto_reconnect = cmd[1]
                     if not cmd[1]:
                         self._reconnect_wanted = False
+                elif kind == "set_extra":
+                    self._extra_fields = set(cmd[1])
+                    if self.connected:
+                        self._refresh_paths()
                 elif kind == "sweep":
                     self._do_sweep(cmd[1])
             except Exception as e:
@@ -294,10 +284,12 @@ class DeviceWorker(threading.Thread):
 
     def _refresh_paths(self):
         fast, slow = list(COMMON_FAST), list(COMMON_SLOW)
+        polled = [k for k in HIST_PATHS
+                  if k in BASE_FIELDS or k in self._extra_fields]
         for a in self.axes:
-            af, aslow = _axis_paths(a)
-            fast += af
-            slow += aslow
+            fast.append("axis%d.current_state" % a)
+            fast += ["axis%d.%s" % (a, HIST_PATHS[k]) for k in polled]
+            slow += _axis_slow_paths(a)
         self._fast_paths = fast
         self._slow_paths = slow
 
@@ -346,7 +338,7 @@ class DeviceWorker(threading.Thread):
             try:
                 self.snapshot[p] = d.rd(p)
             except Exception:
-                if p.endswith(HIST_PATHS["vel_int"]):
+                if p.rsplit(".", 1)[-1] in OPTIONAL_FAST_SUFFIXES:
                     # 旧固件没有该属性:记 None 并从轮询列表剔除
                     self.snapshot[p] = None
                     failed_opt.append(p)
@@ -358,11 +350,11 @@ class DeviceWorker(threading.Thread):
             self._poll_slow()
         t = time.time()
         for a in self.axes:
-            row = [t]
-            row += [self.snapshot.get("axis%d.%s" % (a, p))
-                    for p in HIST_PATHS.values()]
-            row += [self.snapshot.get("vbus_voltage"), self.snapshot.get("ibus")]
-            self.hist[a].append(tuple(row))
+            vals = {k: self.snapshot.get("axis%d.%s" % (a, p))
+                    for k, p in HIST_PATHS.items()}
+            vals["vbus"] = self.snapshot.get("vbus_voltage")
+            vals["ibus"] = self.snapshot.get("ibus")
+            self.hist[a].append(make_hist_row(t, **vals))
         if self._rec is not None:
             self._rec_write(t)
         self.tick += 1
@@ -520,9 +512,9 @@ class DeviceWorker(threading.Thread):
                 samples.append((time.monotonic() - t0, v))
                 h = self.hist.get(axis)
                 if h is not None:   # 主曲线继续(仅速度,其余字段留空)
-                    h.append((time.time(), v, None, None, None, None,
-                              self.snapshot.get("vbus_voltage"),
-                              self.snapshot.get("ibus")))
+                    h.append(make_hist_row(time.time(), vel=v,
+                                           vbus=self.snapshot.get("vbus_voltage"),
+                                           ibus=self.snapshot.get("ibus")))
             next_t += SWEEP_WRITE_INTERVAL
             now = time.monotonic()
             if next_t > now:

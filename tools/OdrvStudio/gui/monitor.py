@@ -14,26 +14,47 @@ from PyQt5.QtWidgets import (
     QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
+from ..device import EXTRA_FIELDS, HIST_PATHS
+
 pg.setConfigOptions(antialias=False, background="#000000", foreground="#c8ccd4")
 
-# 每轴一组颜色: vel_set(目标) / vel(速度) / pos(位置) / iq(电流) / vel_int(积分器)
+ROW_NAMES = tuple(HIST_PATHS) + ("vbus", "ibus")
+
+# 每轴一组颜色: 顺序同 HIST_PATHS(vel/vel_set/pos/iq/vel_int/ia/ib/ic/vq/vd)
 AXIS_COLORS = {
     0: {"vel_set": "#ef5350", "vel": "#66bb6a", "pos": "#26c6da",
-        "iq": "#ffee58", "vel_int": "#ba68c8"},
+        "iq": "#ffee58", "vel_int": "#ba68c8",
+        "ia": "#ff8a65", "ib": "#4db6ac", "ic": "#f06292",
+        "vq": "#ffb74d", "vd": "#a1887f"},
     1: {"vel_set": "#ff7043", "vel": "#ab47bc", "pos": "#42a5f5",
-        "iq": "#ec407a", "vel_int": "#ffb74d"},
+        "iq": "#ec407a", "vel_int": "#ce93d8",
+        "ia": "#e6ee9c", "ib": "#80cbc4", "ic": "#f48fb1",
+        "vq": "#ffe082", "vd": "#bcaaa4"},
 }
 COMMON_COLORS = {"vbus": "#fff176", "ibus": "#a1887f"}
-ROW_NAMES = ("vel", "vel_set", "pos", "iq", "vel_int", "vbus", "ibus")
 
-# 曲线分组(复选框显隐): key -> 字段
+# 每条曲线的画笔样式与图例名
+CURVE_STYLES = {
+    "vel": (1.6, None), "vel_set": (1.4, None), "iq": (1.2, None),
+    "pos": (1.4, Qt.DashLine), "vel_int": (1.0, Qt.DotLine),
+    "ia": (1.0, None), "ib": (1.0, None), "ic": (1.0, None),
+    "vq": (1.0, Qt.DotLine), "vd": (1.0, Qt.DotLine),
+}
+CURVE_NAMES = {"vel": "速度", "vel_set": "目标", "pos": "位置", "iq": "电流",
+               "vel_int": "积分", "ia": "Ia", "ib": "Ib", "ic": "Ic",
+               "vq": "Vq", "vd": "Vd"}
+
+# 曲线分组(复选框显隐): label -> 字段;相电流/电压默认隐藏且不轮询
 CURVE_GROUPS = [
-    ("目标", "vel_set"),
-    ("速度", "vel"),
-    ("位置", "pos"),
-    ("电流", "iq"),
-    ("积分", "vel_int"),
+    ("目标", ("vel_set",)),
+    ("速度", ("vel",)),
+    ("位置", ("pos",)),
+    ("电流", ("iq",)),
+    ("积分", ("vel_int",)),
+    ("相电流", ("ia", "ib", "ic")),
+    ("电压", ("vq", "vd")),
 ]
+GROUP_DEFAULT_ON = {"目标", "速度", "位置", "电流", "积分"}
 
 
 class MonitorWidget(QWidget):
@@ -43,6 +64,7 @@ class MonitorWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.on_extra_fields = None   # 显隐变化回调(work_area 注入 → worker)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(3)
@@ -71,15 +93,19 @@ class MonitorWidget(QWidget):
         bar.addWidget(self.btn_view_all)
         self.btn_view_all.clicked.connect(self._view_all)
         bar.addSpacing(14)
-        self._checks = {}
-        for name, key in CURVE_GROUPS:
-            cb = QCheckBox(name)
-            cb.setChecked(True)
-            color = AXIS_COLORS[0][key]
+        self._checks = {}   # label -> (checkbox, keys)
+        for label, keys in CURVE_GROUPS:
+            cb = QCheckBox(label)
+            cb.setChecked(label in GROUP_DEFAULT_ON)
+            color = AXIS_COLORS[0][keys[0]]
             cb.setStyleSheet("QCheckBox{color:%s; font-weight:bold;}" % color)
-            cb.stateChanged.connect(lambda _s, k=key: self._set_group_visible(k))
+            if label in ("相电流", "电压"):
+                cb.setToolTip("勾选后才开始轮询对应字段(相电流: current_meas_phA/B/C;\n"
+                              "电压: FOC 的 dq 轴电压指令 Vq/Vd_setpoint,"
+                              "0.5.6 固件无直接相电压测量)")
+            cb.stateChanged.connect(lambda _s, lb=label: self._set_group_visible(lb))
             bar.addWidget(cb)
-            self._checks[key] = cb
+            self._checks[label] = (cb, keys)
         bar.addStretch(1)
         lab_ds = QLabel("Downsample")
         lab_ds.setStyleSheet("color:#8a93a5;")
@@ -116,28 +142,34 @@ class MonitorWidget(QWidget):
             base = "a%d__" % a if multi else ""
             color = AXIS_COLORS.get(a, AXIS_COLORS[0])
             label = " a%d" % a if multi else ""
-            reg(base + "vel_set", ("axis", a, "vel_set"),
-                pg.mkPen(color["vel_set"], width=1.4), "目标" + label)
-            reg(base + "vel", ("axis", a, "vel"),
-                pg.mkPen(color["vel"], width=1.6), "速度" + label)
-            reg(base + "pos", ("axis", a, "pos"),
-                pg.mkPen(color["pos"], width=1.4, style=Qt.DashLine), "位置" + label)
-            reg(base + "iq", ("axis", a, "iq"),
-                pg.mkPen(color["iq"], width=1.2), "电流" + label)
-            reg(base + "vel_int", ("axis", a, "vel_int"),
-                pg.mkPen(color["vel_int"], width=1.0, style=Qt.DotLine),
-                "积分" + label)
+            for k in HIST_PATHS:
+                width, style = CURVE_STYLES[k]
+                pen = pg.mkPen(color[k], width=width,
+                               style=style if style is not None else Qt.SolidLine)
+                reg(base + k, ("axis", a, k), pen, CURVE_NAMES[k] + label)
         for name in ("vbus", "ibus"):
             reg(name, ("common", name),
                 pg.mkPen(COMMON_COLORS[name], width=1.0, style=Qt.DotLine), name)
-        for key, cb in self._checks.items():
-            self._set_group_visible(key)
+        for label, (cb, _keys) in self._checks.items():
+            self._set_group_visible(label)
 
-    def _set_group_visible(self, key):
-        on = self._checks[key].isChecked()
+    def _set_group_visible(self, label):
+        cb, keys = self._checks[label]
+        on = cb.isChecked()
         for k, c in self.curves.items():
-            if self._meta[k][0] == "axis" and self._meta[k][2] == key:
+            if self._meta[k][0] == "axis" and self._meta[k][2] in keys:
                 c.setVisible(on)
+        self._notify_extras()
+
+    def _notify_extras(self):
+        """把"勾选中的额外字段"告知 worker(勾选才轮询)。"""
+        if self.on_extra_fields is None:
+            return
+        extras = set()
+        for label, (cb, keys) in self._checks.items():
+            if cb.isChecked():
+                extras.update(k for k in keys if k in EXTRA_FIELDS)
+        self.on_extra_fields(extras)
 
     def _view_all(self):
         self.plot.enableAutoRange()
@@ -156,9 +188,12 @@ class MonitorWidget(QWidget):
         if not path:
             return
         base = self._axes[0]
+        axis_fields = list(HIST_PATHS)            # 行内字段索引 1..len(fields)
+        i_vbus = ROW_NAMES.index("vbus")
+        i_ibus = ROW_NAMES.index("ibus")
         cols = ["t"]
         for a in self._axes:
-            cols += ["%s_a%d" % (k, a) for k in ("vel", "vel_set", "pos", "iq", "vel_int")]
+            cols += ["%s_a%d" % (k, a) for k in axis_fields]
         cols += ["vbus", "ibus"]
         n = max((len(hist.get(a, [])) for a in self._axes), default=0)
         with open(path, "w", encoding="utf-8") as f:
@@ -168,10 +203,13 @@ class MonitorWidget(QWidget):
                 for a in self._axes:
                     h = hist.get(a, [])
                     r = h[i] if i < len(h) else None
-                    row += ([_csv_num(r[j]) for j in range(1, 6)] if r else [""] * 5)
+                    row += ([_csv_num(r[j])
+                             for j in range(1, 1 + len(axis_fields))]
+                            if r else [""] * len(axis_fields))
                 hb = hist.get(base, [])
                 rb = hb[i] if i < len(hb) else None
-                row += ([_csv_num(rb[6]), _csv_num(rb[7])] if rb else ["", ""])
+                row += ([_csv_num(rb[i_vbus]), _csv_num(rb[i_ibus])]
+                        if rb else ["", ""])
                 f.write(",".join(row) + "\n")
 
     def clear(self):
@@ -198,8 +236,10 @@ class MonitorWidget(QWidget):
             self._t0["common"] = hist[any_axis][0][0]
         t0_c = self._t0["common"]
         common = {n: ([], []) for n in ("vbus", "ibus")}
+        i_vbus = ROW_NAMES.index("vbus")
+        i_ibus = ROW_NAMES.index("ibus")
         for row in hist[any_axis]:
-            for i, n in zip((6, 7), ("vbus", "ibus")):
+            for i, n in ((i_vbus, "vbus"), (i_ibus, "ibus")):
                 v = row[i]
                 if isinstance(v, (int, float)):
                     common[n][0].append(row[0] - t0_c)

@@ -3,6 +3,36 @@
 (原 tools/OdrvTool/device.py 的公共部分,统一进 OdrvStudio)
 """
 
+# 监控曲线字段: hist 行 = (t, <HIST_PATHS 各字段按序>, vbus, ibus)
+# worker 轮询与 GUI 曲线共用此定义,保证行结构单一来源
+HIST_PATHS = {
+    "vel": "encoder.vel_estimate",
+    "vel_set": "controller.vel_setpoint",
+    "pos": "encoder.pos_estimate",
+    "iq": "motor.current_control.Iq_measured",
+    "vel_int": "controller.vel_integrator_value",
+    "ia": "motor.current_meas_phA",
+    "ib": "motor.current_meas_phB",
+    "ic": "motor.current_meas_phC",
+    "vq": "motor.current_control.Vq_setpoint",
+    "vd": "motor.current_control.Vd_setpoint",
+}
+# 始终轮询的字段 / 仅当曲线勾选显示时才轮询的字段(省 USB 带宽)
+BASE_FIELDS = ("vel", "vel_set", "pos", "iq", "vel_int")
+EXTRA_FIELDS = ("ia", "ib", "ic", "vq", "vd")
+# 旧固件可能缺失的 fast 路径(读取失败时记 None 并从轮询剔除)
+OPTIONAL_FAST_SUFFIXES = ("vel_integrator_value", "Vq_setpoint", "Vd_setpoint")
+
+
+def make_hist_row(t, **fields):
+    """按 HIST_PATHS 顺序构造 hist 行(未给出的字段为 None)。
+
+    行结构 = (t, <HIST_PATHS 各字段按序>, vbus, ibus),worker 与 GUI 共用。
+    """
+    row = [t] + [fields.get(k) for k in HIST_PATHS]
+    row += [fields.get("vbus"), fields.get("ibus")]
+    return tuple(row)
+
 AXIS_STATE = {
     0: "UNDEFINED", 1: "IDLE", 2: "STARTUP_SEQUENCE",
     3: "FULL_CALIBRATION_SEQUENCE", 4: "MOTOR_CALIBRATION",

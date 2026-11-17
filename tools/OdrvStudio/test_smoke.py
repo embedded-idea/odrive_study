@@ -153,11 +153,12 @@ def stage3():
     check(os.path.exists(csv_path) and os.path.getsize(csv_path) > 50, "csv exported")
     with open(csv_path) as f:
         header = f.readline().strip()
-    check("vel_a0" in header and "vel_a1" in header and "vel_int_a0" in header,
+    check("vel_a0" in header and "vel_a1" in header and "vel_int_a0" in header
+          and "ia_a0" in header and "vq_a1" in header,
           "csv columns: %s" % header)
-    # 积分器曲线(hist 行 8 列 + 曲线已注册)
+    # hist 行 = t + 10 字段 + vbus/ibus = 13 列;曲线已注册
     r = worker.hist[0][0]
-    check(len(r) == 8, "hist row has 8 cols incl vel_int")
+    check(len(r) == 13, "hist row has 13 cols (t+10+vbus/ibus)")
     check(any(k.endswith("vel_int") for k in win.work.monitor.curves),
           "vel_int curves registered")
     # 连续录制
@@ -178,6 +179,8 @@ def stage3():
     win.add_device_form()
     check(win.work is not None and win.tabs.indexOf(win.work) >= 0,
           "device tab re-added")
+    # 勾选"相电流" → 应开始轮询 ia/ib/ic(异步,stage4 验证)
+    win.work.monitor._checks["相电流"][0].setChecked(True)
     # 速度扫频(短: 2 个频点 × 1 周期,约 0.3s)
     pid = win.work.pid
     pid.f0.setValue(5.0)
@@ -204,6 +207,12 @@ def stage4():
           "gains snapshot: %s" % pid._saved)
     if pid._saved:
         pid._restore(["vel_gain", "vel_integrator_gain"])
+    # 相电流勾选 → extras 轮询生效;再取消 → 恢复不轮询(异步,stage5 验证)
+    check(worker._extra_fields == {"ia", "ib", "ic"},
+          "extras polled after checkbox: %s" % sorted(worker._extra_fields))
+    check("axis0.motor.current_meas_phA" in worker._fast_paths,
+          "phase-current path in fast poll")
+    win.work.monitor._checks["相电流"][0].setChecked(False)
     # 录制:停止后文件有表头 + 行
     worker.record_stop_req()
     worker._rec_close()          # 确保落盘(即使事件尚未处理)
@@ -224,6 +233,8 @@ def stage5():
     # 恢复增益的写命令是异步的,在这里验证
     check(fake.writes.get("axis0.controller.config.vel_gain") == 1.5,
           "restore wrote vel_gain")
+    # 取消勾选相电流后 extras 轮询已停止
+    check(worker._extra_fields == set(), "extras cleared after uncheck")
     # 模拟掉线 → 自动重连(run 循环按 _reconnect_due 尝试)
     worker._on_lost("模拟掉线")
     check(not worker.connected, "device lost detected")

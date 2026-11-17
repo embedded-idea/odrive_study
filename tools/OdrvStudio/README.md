@@ -80,7 +80,7 @@ WSL 下需要 WSLg(Win11)或 X server;设备被占用时先关掉 odrivetool。
 |---|---|---|
 | 连接控制 | connectionControl | 设备页第一行:状态灯 / 连接断开 / 轮询频率 / 轴选择 / 自动重连 |
 | DRO 数码管 | droDisplayWidget | 位置/速度/Iq/目标 四个七段数码管 + 状态/Vbus/Ibus 小字;目标随控制模式自动切换 |
-| 实时曲线 | graphicWidget | 单块黑色图 + 图例:目标/速度/位置/电流/积分器 + Vbus/Ibus 虚线;**双轴同屏对比**;停止/暂停/View all/曲线显隐/Downsample |
+| 实时曲线 | graphicWidget | 单块黑色图 + 图例:目标/速度/位置/电流/积分器 + **相电流 Ia/Ib/Ic + Vq/Vd(默认隐藏)** + Vbus/Ibus 虚线;**双轴同屏对比**;停止/暂停/View all/曲线显隐/Downsample |
 | 控制环模式 + 力矩 | controlLoopConfig / torqueConfig | 模式下拉(速度/位置/力矩)、input_torque 设定、current_lim 限幅 |
 | 点动 / 设定值 | deviceJoggingControl | 速度设定+快捷档位、点动(按住生效)、位置绝对/相对 |
 | 通用控制 | generalControls | 进入闭环/回 IDLE、电机/编码器标定、保存配置、清除错误、全轴急停 |
@@ -121,8 +121,14 @@ USB 卡顿时界面不冻结。设备层常量(错误码表等)在 `OdrvStudio/d
 - 参数树 / 配置面板的写操作直接作用于设备属性;写 `config.*` 后需 `save` 才掉电保存,
   `save` 会重启设备(WSL 下需重新 `usbipd attach`)。
 - 监控曲线数据保存在后台线程的环形缓冲(默认 60 s),暂停只影响显示;
-  “导出 CSV”输出各轴速度/位置/Iq/积分器及母线电压电流;
+  “导出 CSV”输出各轴速度/位置/Iq/积分器/相电流/电压及母线电压电流;
   需要完整记录时用“开始录制”(直接落盘,无时长限制)。
+- **相电流与电压曲线**(默认隐藏):勾选“相电流”显示 `motor.current_meas_phA/B/C`
+  (三相 120° 互差的正弦),勾选“电压”显示 FOC 的 dq 轴电压指令
+  `motor.current_control.Vq_setpoint / Vd_setpoint`。
+  0.5.6 固件没有直接的相电压测量,故用 Vq/Vd 代替(勾选框 tooltip 已说明)。
+  字段只在勾选后才轮询,不勾选不给 USB 增加负载;录制/CSV 始终包含全部列,
+  未轮询的列写空值。
 - **扫频说明**:激励以 250 Hz 更新 `input_vel`,以约 125 Hz 采样 `vel_estimate`,
   锁相分析逐频点计算幅相(自动去直流、跳过每段前半周期瞬态)。
   扫频期间主曲线只更新速度;急停/停止会立即中止扫频并把 input_vel 归零。

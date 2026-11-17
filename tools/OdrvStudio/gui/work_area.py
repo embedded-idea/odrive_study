@@ -206,6 +206,7 @@ class WorkArea(QWidget):
 
         # ---- 第二行: 实时曲线 ----
         self.monitor = MonitorWidget()
+        self.monitor.on_extra_fields = lambda f: worker.set_visible_req(f)
         self.monitor.stopRequested.connect(
             lambda: self.worker.stop_req(self.axis))
         split.addWidget(self.monitor)
