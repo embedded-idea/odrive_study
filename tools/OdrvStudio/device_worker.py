@@ -88,6 +88,10 @@ class DeviceWorker(threading.Thread):
         self._sweep_active = False
         self._sweep_cancel = False
 
+        # 读请求自增序号(time.monotonic_ns() 在 Windows 上精度粗,
+        # 快速连续请求会产生重复 ID,导致 rd_result 被误丢弃)
+        self._rd_seq = 0
+
     # ---------- GUI 侧接口 ----------
 
     def subscribe(self, fn):
@@ -117,7 +121,8 @@ class DeviceWorker(threading.Thread):
         self.post("wr", path, value)
 
     def read_req(self, paths):
-        req_id = time.monotonic_ns()
+        self._rd_seq += 1
+        req_id = self._rd_seq
         self.post("rd", req_id, list(paths))
         return req_id
 
@@ -491,13 +496,15 @@ class DeviceWorker(threading.Thread):
         """单个频点:发 cycles 个正弦周期,锁相算 |H| 与相位。"""
         dur = cycles / f
         w = 2.0 * math.pi * f
-        t0 = time.monotonic()
+        # 用 perf_counter 而非 monotonic:Windows 上 monotonic 粒度
+        # 约 15.6ms,无法支撑 250Hz 激励节拍;perf_counter 是高精度时钟
+        t0 = time.perf_counter()
         seg_end = t0 + dur
         next_t = t0
         i = 0
         samples = []
         while True:
-            now = time.monotonic()
+            now = time.perf_counter()
             if now >= seg_end or self._sweep_cancel or self._stop_evt.is_set():
                 break
             try:
@@ -509,16 +516,23 @@ class DeviceWorker(threading.Thread):
                 # 轻量采样: 只读 vel_estimate(完整轮询太重,会拖慢激励)
                 v = self.dev.rd(vel_path)
                 self.snapshot[vel_path] = v
-                samples.append((time.monotonic() - t0, v))
+                samples.append((time.perf_counter() - t0, v))
                 h = self.hist.get(axis)
                 if h is not None:   # 主曲线继续(仅速度,其余字段留空)
                     h.append(make_hist_row(time.time(), vel=v,
                                            vbus=self.snapshot.get("vbus_voltage"),
                                            ibus=self.snapshot.get("ibus")))
             next_t += SWEEP_WRITE_INTERVAL
-            now = time.monotonic()
+            now = time.perf_counter()
             if next_t > now:
-                time.sleep(min(next_t - now, SWEEP_WRITE_INTERVAL))
+                # Windows 默认定时器精度约 15.6ms,短睡眠会严重过冲,
+                # 先粗睡大段剩余时间,最后 <=20ms 的部分自旋保证节拍
+                # (仅扫频期间占用单核,GUI 线程不受影响)
+                delta = next_t - now
+                if delta > 0.02:
+                    time.sleep(delta - 0.02)
+                while time.perf_counter() < next_t:
+                    pass
             else:
                 next_t = now
         # 锁相分析(跳过前半个周期的瞬态;先去直流,防止偏置泄漏)
