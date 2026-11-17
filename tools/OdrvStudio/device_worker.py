@@ -1,4 +1,4 @@
-"""OdrvStudio - 后台设备线程。
+"""OdrvStudio - 后台设备线程(双轴)。
 
 所有 USB/fibre 访问都收敛在这一个线程里(GUI 通过命令队列 + 事件队列交互),
 避免 GUI 卡顿,也避免多线程并发访问设备。
@@ -11,44 +11,45 @@ from collections import deque
 
 import odrive
 
-from OdrvTool.device import AXIS_STATE
-
-# 高频轮询路径:每个 tick 读一次(监控曲线 + DRO)
-FAST_PATHS = [
-    "vbus_voltage",
-    "ibus",
-    "axis0.current_state",
-    "axis0.encoder.vel_estimate",
-    "axis0.controller.vel_setpoint",
-    "axis0.encoder.pos_estimate",
-    "axis0.motor.current_control.Iq_measured",
-]
-
-# 低频轮询路径:约 1 s 读一次(错误、相电流、模式等)
-SLOW_PATHS = [
-    "error",
-    "axis0.error",
-    "axis0.motor.error",
-    "axis0.encoder.error",
-    "axis0.controller.error",
-    "axis0.encoder.pos_abs",
-    "axis0.motor.current_meas_phA",
-    "axis0.motor.current_meas_phB",
-    "axis0.motor.current_meas_phC",
-    "axis0.config.enable_sensorless_mode",
-    "axis0.encoder.config.pre_calibrated",
-    "axis0.controller.config.control_mode",
-    "fw_version_major",
-    "fw_version_minor",
-    "fw_version_revision",
-    "system_stats.uptime",
-]
-
-ERR_PATHS = ["error", "axis0.error", "axis0.motor.error",
-             "axis0.encoder.error", "axis0.controller.error"]
+from .device import AXIS_STATE
 
 HIST_FIELDS = ("t", "vel", "vel_set", "pos", "iq", "vbus", "ibus")
 HIST_WINDOW_S = 60
+
+COMMON_FAST = ["vbus_voltage", "ibus"]
+COMMON_SLOW = [
+    "error",
+    "serial_number",
+    "fw_version_major", "fw_version_minor", "fw_version_revision",
+    "system_stats.uptime",
+]
+
+ERR_PATHS = ["error"]  # 轴错误路径按轴追加
+
+
+def _axis_paths(a):
+    """单个轴的轮询路径。"""
+    fast = [
+        "axis%d.current_state" % a,
+        "axis%d.encoder.vel_estimate" % a,
+        "axis%d.controller.vel_setpoint" % a,
+        "axis%d.encoder.pos_estimate" % a,
+        "axis%d.motor.current_control.Iq_measured" % a,
+    ]
+    slow = [
+        "axis%d.error" % a,
+        "axis%d.motor.error" % a,
+        "axis%d.encoder.error" % a,
+        "axis%d.controller.error" % a,
+        "axis%d.encoder.pos_abs" % a,
+        "axis%d.motor.current_meas_phA" % a,
+        "axis%d.motor.current_meas_phB" % a,
+        "axis%d.motor.current_meas_phC" % a,
+        "axis%d.config.enable_sensorless_mode" % a,
+        "axis%d.encoder.config.pre_calibrated" % a,
+        "axis%d.controller.config.control_mode" % a,
+    ]
+    return fast, slow
 
 
 class DeviceWorker(threading.Thread):
@@ -62,13 +63,16 @@ class DeviceWorker(threading.Thread):
         self._listeners = []
         self._stop_evt = threading.Event()
 
-        self.dev = None          # OdrvTool.device.Device
+        self.dev = None          # _DeviceAdapter
         self.connected = False
         self.connecting = False
         self.last_error = ""
+        self.axes = [0]          # 连接后探测:单轴 [0] / 双轴 [0, 1]
         self.snapshot = {}       # path -> value (None = 读取失败)
-        self.hist = deque(maxlen=max(60, int(poll_rate * HIST_WINDOW_S)))
+        self.hist = {}           # axis -> deque[(t, vel, vel_set, pos, iq, vbus, ibus)]
         self.tick = 0
+        self._fast_paths = []
+        self._slow_paths = []
 
     # ---------- GUI 侧接口 ----------
 
@@ -161,31 +165,56 @@ class DeviceWorker(threading.Thread):
         try:
             raw = odrive.find_sync(timeout=timeout)
             self.dev = _DeviceAdapter(raw)
+            self.axes = self._probe_axes()
+            self._refresh_paths()
             self.connected = True
             self.last_error = ""
             self.snapshot = {}
-            self.hist.clear()
-            self._emit("connected")
+            self.hist = {a: deque(maxlen=max(60, int(self.poll_rate * HIST_WINDOW_S)))
+                         for a in self.axes}
+            self._emit("connected", list(self.axes))
             self._poll_slow()   # 连上立刻刷一遍慢路径
         except Exception as e:
             self.dev = None
+            self.axes = [0]
             self.last_error = _friendly_err(e)
             self._emit("connect_failed", self.last_error)
         finally:
             self.connecting = False
 
+    def _probe_axes(self):
+        """探测存在的轴:axis0 必有,axis1 视固件/板卡而定。"""
+        axes = [0]
+        try:
+            self.dev.rd("axis1.current_state")
+            axes.append(1)
+        except Exception:
+            pass
+        return axes
+
+    def _refresh_paths(self):
+        fast, slow = list(COMMON_FAST), list(COMMON_SLOW)
+        for a in self.axes:
+            af, aslow = _axis_paths(a)
+            fast += af
+            slow += aslow
+        self._fast_paths = fast
+        self._slow_paths = slow
+
     def _do_disconnect(self):
         self._dev_close()
         self.connected = False
+        self.axes = [0]
         self.snapshot = {}
-        self.hist.clear()
+        self.hist = {}
         self._emit("disconnected", "手动断开")
 
     def _on_lost(self, reason):
         self._dev_close()
         self.connected = False
+        self.axes = [0]
         self.snapshot = {}
-        self.hist.clear()
+        self.hist = {}
         self._emit("disconnected", reason)
 
     def _dev_close(self):
@@ -200,25 +229,26 @@ class DeviceWorker(threading.Thread):
 
     def _poll(self):
         d = self.dev
-        for p in FAST_PATHS:
+        for p in self._fast_paths:
             self.snapshot[p] = d.rd(p)
         if self.tick % max(1, self.poll_rate) == 0:
             self._poll_slow()
-        row = tuple(
-            self.snapshot.get(p) for p in
-            ("axis0.encoder.vel_estimate", "axis0.controller.vel_setpoint",
-             "axis0.encoder.pos_estimate",
-             "axis0.motor.current_control.Iq_measured",
-             "vbus_voltage", "ibus")
-        )
-        self.hist.append((time.time(),) + row)
+        for a in self.axes:
+            self.hist[a].append((
+                time.time(),
+                self.snapshot.get("axis%d.encoder.vel_estimate" % a),
+                self.snapshot.get("axis%d.controller.vel_setpoint" % a),
+                self.snapshot.get("axis%d.encoder.pos_estimate" % a),
+                self.snapshot.get("axis%d.motor.current_control.Iq_measured" % a),
+                self.snapshot.get("vbus_voltage"),
+                self.snapshot.get("ibus"),
+            ))
         self.tick += 1
 
     def _poll_slow(self):
-        d = self.dev
-        for p in SLOW_PATHS:
+        for p in self._slow_paths:
             try:
-                self.snapshot[p] = d.rd(p)
+                self.snapshot[p] = self.dev.rd(p)
             except Exception:
                 self.snapshot[p] = None
 
@@ -258,42 +288,58 @@ class DeviceWorker(threading.Thread):
             return
         d = self.dev
         try:
-            if name == "start":
-                d.wr("axis0.controller.input_vel", 0.0)
-                d.wr("axis0.requested_state", 8)
-            elif name == "stop":
-                d.wr("axis0.controller.input_vel", 0.0)
-                d.wr("axis0.requested_state", 1)
-            elif name == "estop":
-                d.wr("axis0.controller.input_vel", 0.0)
-                d.wr("axis0.requested_state", 1)
+            if name == "estop":
+                for a in self.axes:
+                    self._axis_stop(d, a)
+            elif name in ("start", "stop", "cal_motor", "cal_encoder"):
+                a = arg if arg in self.axes else 0
+                if name == "start":
+                    self._axis_start(d, a)
+                elif name == "stop":
+                    self._axis_stop(d, a)
+                elif name == "cal_motor":
+                    self._axis_cal(d, a, 4)
+                elif name == "cal_encoder":
+                    self._axis_cal(d, a, 7)
             elif name == "clear_errors":
-                for p in ERR_PATHS:
+                paths = list(ERR_PATHS)
+                for a in self.axes:
+                    paths += ["axis%d.error" % a, "axis%d.motor.error" % a,
+                              "axis%d.encoder.error" % a,
+                              "axis%d.controller.error" % a]
+                for p in paths:
                     try:
                         d.wr(p, 0)
                     except Exception:
                         pass
             elif name == "save":
-                d.dev.save_configuration()
+                d.raw.save_configuration()
                 self._emit("log", "[ok] 已保存,设备重启中(WSL 下可能需要重新 usbipd attach)")
-            elif name == "cal_motor":
-                if d.rd("axis0.current_state") != 1:
-                    d.wr("axis0.requested_state", 1)
-                    time.sleep(0.2)
-                d.wr("axis0.requested_state", 4)
-            elif name == "cal_encoder":
-                if d.rd("axis0.current_state") != 1:
-                    d.wr("axis0.requested_state", 1)
-                    time.sleep(0.2)
-                d.wr("axis0.requested_state", 7)
             elif name == "reboot":
-                d.dev.reboot()
+                d.raw.reboot()
             else:
                 self._emit("log", "[err] 未知动作 %s" % name)
                 return
             self._emit("action_done", name)
         except Exception as e:
             self._emit("log", "[err] %s 失败: %s: %s" % (name, type(e).__name__, e))
+
+    @staticmethod
+    def _axis_start(d, a):
+        d.wr("axis%d.controller.input_vel" % a, 0.0)
+        d.wr("axis%d.requested_state" % a, 8)
+
+    @staticmethod
+    def _axis_stop(d, a):
+        d.wr("axis%d.controller.input_vel" % a, 0.0)
+        d.wr("axis%d.requested_state" % a, 1)
+
+    @staticmethod
+    def _axis_cal(d, a, state):
+        if d.rd("axis%d.current_state" % a) != 1:
+            d.wr("axis%d.requested_state" % a, 1)
+            time.sleep(0.2)
+        d.wr("axis%d.requested_state" % a, state)
 
 
 class _DeviceAdapter:

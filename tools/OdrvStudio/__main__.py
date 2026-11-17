@@ -10,7 +10,7 @@ import argparse
 import os
 import sys
 
-# 保证可以从仓库任意位置启动:tools/ 目录加入 sys.path(为了 import OdrvTool)
+# 支持直接运行本文件:把 tools/ 目录加进 sys.path
 _TOOLS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _TOOLS not in sys.path:
     sys.path.insert(0, _TOOLS)
@@ -62,13 +62,13 @@ def main(argv=None):
     worker = DeviceWorker(poll_rate=args.poll_rate)
     roots = load_spec(args.spec)
 
-    from odrvstudio.gui.main_window import MainWindow
+    from OdrvStudio.gui.main_window import MainWindow
     win = MainWindow(worker, roots)
     win.show()
     worker.start()
     rc = app.exec_()
     worker.stop()
-    worker.wait(1500)
+    worker.join(1500)
     return rc
 
 

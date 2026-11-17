@@ -130,3 +130,31 @@ def decode_bits(mask, node):
         return "NONE"
     names = [n for n in node.flags if mask & (1 << node.bits[n])]
     return " | ".join(names) if names else "0x%x" % mask
+
+
+def build_index(roots):
+    """path -> Attr 的扁平索引。"""
+    idx = {}
+
+    def rec(nodes):
+        for n in nodes:
+            idx[n.path] = n
+            rec(n.children)
+
+    rec(roots)
+    return idx
+
+
+def writable_leaves(node):
+    """收集节点子树内全部可写叶子 Attr(保持 yaml 顺序)。"""
+    out = []
+
+    def rec(n):
+        if n.children:
+            for c in n.children:
+                rec(c)
+        elif n.writable:
+            out.append(n)
+
+    rec(node)
+    return out

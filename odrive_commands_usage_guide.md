@@ -432,113 +432,39 @@ dev0.axis0.requested_state = AXIS_STATE_ENCODER_OFFSET_CALIBRATION
 - 功能：配置向导、实时曲线、参数树、标定、预设管理、命令控制台
 - 第三方项目，先在空载、低电压下试；它同样独占 USB，建议不要和本仓库脚本同时开
 
-### 9.3 本仓库自带 `tools/odrv_gui.py`（推荐先试这个）
+### 9.3 本仓库自带 `tools/odrvstudio`（OdrvStudio 桌面 GUI，推荐）
 
-零依赖（只用 `odrive` 包 + Python 标准库），专门配这套 2804 + AS5047P。
+参考 SimpleFOCStudio 架构开发的 PyQt5 + PyQtGraph 桌面工作台，
+专门配这套 2804 + AS5047P，支持双轴。依赖 `PyQt5`、`pyqtgraph`（已装入
+`~/.odrive-venv`）；WSL 下需要 WSLg（Win11）或 X server。
 
 启动：
 
 ```bash
 cd ~/workspace/odrive_study
-~/.odrive-venv/bin/python tools/odrv_gui.py
+./tools/odrvstudio              # 或 --poll-rate 50 调整轮询频率
 ```
 
-或者用 OdrvTool：
+功能：
 
-```bash
-./tools/odrvtool gui
-```
-
-浏览器打开：
-
-```
-http://localhost:8765
-```
-
-如果 Windows 浏览器打不开 `localhost`，用 WSL 的 IP：
-
-```bash
-hostname -I          # 例如 172.26.142.47
-# 浏览器访问 http://172.26.142.47:8765
-```
-
-页面功能：
-
-| 区域 | 作用 |
+| 模块 | 说明 |
 |---|---|
-| 状态卡片 | 母线电压/电流、状态机、速度、位置、Iq、错误 |
-| 急停 | 右上角红色按钮；快捷键 `Space` / `Esc` |
-| 启动/停止 | 进闭环 / 回 IDLE |
-| 速度 | 滑块 + 数字框 + 快捷档位（-2…+2）；“平滑”走 VEL_RAMP |
-| 位置 | 绝对移动 / 相对移动 / 点动（±0.1、±1） |
-| 调试参数 | `vel_gain`、`vel_integrator_gain`、`pos_gain`、`vel_limit`、`vel_ramp_rate`、`current_lim`、`torque_constant`、`enc_bandwidth` 在线读写 |
-| 三路曲线 | 速度（目标 vs 实测）、位置、Iq |
-| 三相电流 | `Ia/Ib/Ic` 实时值 + 波形采集（约 700 Hz USB 采样），支持自动采集 |
-| 错误详情 | 错误码翻译成具体名字（如 `ABS_SPI_COM_FAIL`） |
-| 其他 | 电机/编码器标定、保存并重启、导出 CSV、重连、清错误 |
+| 连接管理 | 连接 / 断开 / 掉线自动提示，轮询频率 2–100 Hz 可调 |
+| DRO + 曲线 | 状态、Vbus、Ibus、速度、位置、Iq、三相电流；双轴曲线同屏对比，可暂停、导出 CSV |
+| 控制面板 | 速度 / 位置 / 力矩模式，滑块 + 快捷档位，点动，急停（全轴） |
+| PID 调参 | `vel_gain` / `vel_integrator_gain` / `pos_gain` / `vel_limit` / `vel_ramp_rate` 读写 + 速度阶跃响应测试 |
+| 参数树 | 解析 `odrive-interface.yaml`（约 680 个属性），惰性加载、过滤、双击写入，错误位翻译 |
+| 配置 / 代码 | 读当前配置生成 odrivetool 风格 Python 脚本；配置快照保存为 JSON / 写回设备（支持跨轴映射） |
+| 终端 | `get/set` 任意属性、`status/errors/clear/cal/save/reboot`、`path = value` 语法 |
 
 注意事项：
 
 - 运行期间 **独占 ODrive**，先关掉 `odrivetool` 和其它脚本。
-- 关掉 GUI（Ctrl-C 或 `pkill -f odrv_gui.py`）**不会停机**，
-  先在页面点“停止”，或事后用 `odrivetool` 发 `AXIS_STATE_IDLE`。
-- 端口冲突时换端口：`--port 8766`。
+- 关闭窗口前建议先点“回 IDLE / 急停”。
+- `save_configuration` 会让设备重启，WSL 下需要重新 `usbipd attach`。
 
-### 9.4 命令行工具 `OdrvTool`
-
-位置：
-
-```
-tools/
-├── odrv_gui.py          # Web GUI
-├── odrvtool             # 启动器（可执行）
-└── OdrvTool/            # Python 包
-    ├── __init__.py
-    ├── __main__.py
-    ├── cli.py
-    └── device.py
-```
-
-用法：
-
-```bash
-cd ~/workspace/odrive_study
-
-./tools/odrvtool status          # 状态
-./tools/odrvtool start           # 进闭环（0 turn/s）
-./tools/odrvtool vel 0.2         # 速度
-./tools/odrvtool vel 2.0 --ramp 1.0   # 平滑加速
-./tools/odrvtool pos 1.0         # 绝对位置
-./tools/odrvtool rel 0.5         # 相对位置
-./tools/odrvtool cal motor       # 电机标定
-./tools/odrvtool cal encoder --yes    # 编码器偏置标定
-./tools/odrvtool save            # 保存并重启
-./tools/odrvtool clear           # 清错误
-./tools/odrvtool monitor -i 0.5  # 连续监视
-./tools/odrvtool currents -n 500 # 采样三相电流
-./tools/odrvtool stop            # 停止
-./tools/odrvtool gui --port 8765 # 启动 Web GUI
-```
-
-也可以不用启动器：
-
-```bash
-PYTHONPATH=tools ~/.odrive-venv/bin/python -m OdrvTool status
-```
-
-`status` 输出示例：
-
-```
-Device:   v0.5.6   vbus 12.04 V   ibus 0.00 A
-State:    CLOSED_LOOP_CONTROL (8)   [encoder]   pre_cal=True
-Velocity: +0.200 turn/s   (set +0.200)   Iq +0.054 A
-Position: 195.050 turn
-Errors:   OK
-```
-
-`status --json` 可给脚本用。
-
-> 同样独占 USB：`odrvtool` 和 Web GUI、`odrivetool` 不能同时连。
+> 旧版本仓库自带的 Web GUI（`tools/odrv_gui.py`）和命令行工具
+> （`tools/odrvtool` / `tools/OdrvTool`）已被 OdrvStudio 取代并删除。
 
 ---
 

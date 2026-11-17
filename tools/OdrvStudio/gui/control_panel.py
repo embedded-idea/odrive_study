@@ -1,4 +1,4 @@
-"""OdrvStudio - 电机控制面板。
+"""OdrvStudio - 电机控制面板(支持双轴切换)。
 
 参考 SimpleFOCStudio 的 deviceJoggingControl / generalControls:
 模式选择 + 设定值 + 点动 + 急停。
@@ -7,7 +7,7 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QButtonGroup, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QPushButton, QSlider, QVBoxLayout, QWidget,
+    QPushButton, QSlider, QVBoxLayout, QWidget,
 )
 
 MODES = [("速度模式", 2), ("位置模式", 3), ("力矩模式", 1)]
@@ -21,6 +21,7 @@ class ControlPanel(QWidget):
     def __init__(self, worker, parent=None):
         super().__init__(parent)
         self.worker = worker
+        self.axis = 0
         lay = QVBoxLayout(self)
         lay.addWidget(self._build_mode_box())
         lay.addWidget(self._build_vel_box())
@@ -46,13 +47,13 @@ class ControlPanel(QWidget):
         g.addWidget(self.btn_stop, 1, 1)
         self.mode_group.button(2).setChecked(True)
         self.btn_start.clicked.connect(self._on_start)
-        self.btn_stop.clicked.connect(lambda: self.worker.action_req("stop"))
+        self.btn_stop.clicked.connect(self._on_stop)
         self.mode_group.buttonClicked[int].connect(self._on_mode)
         return box
 
     def _build_vel_box(self):
-        box = QGroupBox("速度 / 点动 [turn/s]")
-        g = QGridLayout(box)
+        self.vel_box = QGroupBox("速度 / 点动 [turn/s]")
+        g = QGridLayout(self.vel_box)
         self.vel_spin = QDoubleSpinBox()
         self.vel_spin.setRange(-100.0, 100.0)
         self.vel_spin.setDecimals(3)
@@ -80,11 +81,11 @@ class ControlPanel(QWidget):
         self.btn_jog_cw.pressed.connect(lambda: self.send_vel(self._jog_speed()))
         for b in (self.btn_jog_ccw, self.btn_jog_cw):
             b.released.connect(lambda: self.send_vel(0.0))
-        return box
+        return self.vel_box
 
     def _build_pos_box(self):
-        box = QGroupBox("位置 [turn]")
-        g = QGridLayout(box)
+        self.pos_box = QGroupBox("位置 [turn]")
+        g = QGridLayout(self.pos_box)
         self.pos_spin = QDoubleSpinBox()
         self.pos_spin.setRange(-1e6, 1e6)
         self.pos_spin.setDecimals(3)
@@ -96,18 +97,16 @@ class ControlPanel(QWidget):
         g.addWidget(self.btn_pos_abs, 1, 0)
         g.addWidget(self.btn_pos_rel, 1, 1)
         g.addWidget(self.btn_pos_rel_neg, 1, 2)
-        self.btn_pos_abs.clicked.connect(
-            lambda: self.worker.write_req("axis0.controller.input_pos",
-                                          self.pos_spin.value()))
+        self.btn_pos_abs.clicked.connect(self._pos_abs)
         self.btn_pos_rel.clicked.connect(lambda: self._pos_rel(+1))
         self.btn_pos_rel_neg.clicked.connect(lambda: self._pos_rel(-1))
-        return box
+        return self.pos_box
 
     def _build_estop(self):
         box = QWidget()
         lay = QHBoxLayout(box)
         lay.setContentsMargins(0, 0, 0, 0)
-        self.btn_estop = QPushButton("⛔ 急停 (IDLE)")
+        self.btn_estop = QPushButton("⛔ 急停 (全部轴 → IDLE)")
         self.btn_estop.setStyleSheet(
             "QPushButton{background:#b71c1c;color:white;font-weight:bold;"
             "padding:10px;border-radius:4px;}"
@@ -116,46 +115,62 @@ class ControlPanel(QWidget):
         lay.addWidget(self.btn_estop)
         return box
 
+    # ---- 路径 ----
+
+    def _p(self, sub):
+        return "axis%d.%s" % (self.axis, sub)
+
     # ---- 行为 ----
 
     def _jog_speed(self):
         return max(0.05, abs(self.vel_spin.value()) or 0.2)
 
     def _on_mode(self, num):
-        self.worker.write_req("axis0.controller.config.control_mode", num)
+        self.worker.write_req(self._p("controller.config.control_mode"), num)
 
     def _on_start(self):
         num = self.mode_group.checkedId()
         if num > 0:
-            self.worker.write_req("axis0.controller.config.control_mode", num)
-        self.worker.action_req("start")
+            self.worker.write_req(self._p("controller.config.control_mode"), num)
+        self.worker.action_req("start", self.axis)
+
+    def _on_stop(self):
+        self.worker.action_req("stop", self.axis)
 
     def send_vel(self, v):
-        self.worker.write_req("axis0.controller.input_vel", float(v))
+        self.worker.write_req(self._p("controller.input_vel"), float(v))
+
+    def _pos_abs(self):
+        self.worker.write_req(self._p("controller.input_pos"), self.pos_spin.value())
 
     def _pos_rel(self, sign):
-        req = self.worker.read_req(["axis0.encoder.pos_estimate"])
+        req = self.worker.read_req([self._p("encoder.pos_estimate")])
         self._rel_pending = (req, sign, self.pos_spin.value())
 
     # ---- 事件 / 状态刷新 ----
+
+    def set_axis(self, axis):
+        self.axis = axis
+        self.vel_box.setTitle("速度 / 点动 [turn/s] — axis%d" % axis)
+        self.pos_box.setTitle("位置 [turn] — axis%d" % axis)
 
     def on_event(self, ev):
         if ev[0] == "rd_result" and getattr(self, "_rel_pending", None):
             req, sign, delta = self._rel_pending
             if req == ev[1]:
-                cur = ev[2].get("axis0.encoder.pos_estimate")
+                cur = ev[2].get(self._p("encoder.pos_estimate"))
                 if isinstance(cur, (int, float)):
-                    self.worker.write_req("axis0.controller.input_pos",
+                    self.worker.write_req(self._p("controller.input_pos"),
                                           cur + sign * delta)
                 self._rel_pending = None
 
     def update_state(self, snap):
-        state = snap.get("axis0.current_state")
+        state = snap.get(self._p("current_state"))
         closed = state == STATE_CLOSED_LOOP
         idle = state == STATE_IDLE
         self.btn_start.setEnabled(idle or state is None or not closed)
         self.btn_stop.setEnabled(state is not None and not idle)
-        mode = snap.get("axis0.controller.config.control_mode")
+        mode = snap.get(self._p("controller.config.control_mode"))
         if isinstance(mode, int) and self.mode_group.checkedId() != mode:
             btn = self.mode_group.button(mode)
             if btn is not None:

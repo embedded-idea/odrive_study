@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from .monitor import CURVE_COLORS
+from .monitor import AXIS_COLORS
 
 PID_PARAMS = [
     ("vel_gain", "速度增益 vel_gain [Nm/(turn/s)]", 0.0, 100.0, 4),
@@ -30,6 +30,7 @@ class PidPanel(QWidget):
     def __init__(self, worker, parent=None):
         super().__init__(parent)
         self.worker = worker
+        self.axis = 0
         self._test_t0 = None       # 阶跃进行中的起始时间
         self._hold_t0 = None       # 最近一次阶跃的时间原点(结束后仍显示曲线)
         self._pending_reads = {}
@@ -45,8 +46,8 @@ class PidPanel(QWidget):
     # ---- 参数区 ----
 
     def _build_param_box(self):
-        box = QGroupBox("控制环参数")
-        g = QGridLayout(box)
+        self.param_box = QGroupBox("控制环参数 — axis0")
+        g = QGridLayout(self.param_box)
         self.spins = {}
         for row, (key, name, lo, hi, dec) in enumerate(PID_PARAMS):
             lab = QLabel(name)
@@ -70,7 +71,7 @@ class PidPanel(QWidget):
         btn_set = QPushButton("全部写入")
         btn_set.clicked.connect(self.write_all)
         g.addWidget(btn_set, len(PID_PARAMS), 2, 1, 2)
-        return box
+        return self.param_box
 
     def _build_test_box(self):
         box = QGroupBox("速度阶跃测试(观察 setpoint 与实际响应)")
@@ -107,16 +108,21 @@ class PidPanel(QWidget):
         return box
 
     def _new_curves(self):
-        self.c_set = self.plot.plot(pen=pg.mkPen(CURVE_COLORS["vel_set"], width=1.4),
+        color = AXIS_COLORS.get(self.axis, AXIS_COLORS[0])
+        self.c_set = self.plot.plot(pen=pg.mkPen(color["vel_set"], width=1.4),
                                     name="vel_set")
-        self.c_vel = self.plot.plot(pen=pg.mkPen(CURVE_COLORS["vel"], width=1.6),
+        self.c_vel = self.plot.plot(pen=pg.mkPen(color["vel"], width=1.6),
                                     name="vel_estimate")
 
     # ---- 读写 ----
 
     def _path(self, key):
-        return ("axis0.controller.config." + key) if key in CFG_KEYS else \
-               ("axis0.controller." + key)
+        return ("axis%d.controller.config." % self.axis + key) if key in CFG_KEYS else \
+               ("axis%d.controller." % self.axis + key)
+
+    def set_axis(self, axis):
+        self.axis = axis
+        self.param_box.setTitle("控制环参数 — axis%d" % axis)
 
     def _read_one(self, key):
         req = self.worker.read_req([self._path(key)])
@@ -141,14 +147,15 @@ class PidPanel(QWidget):
         self._clear_plot()
         self._test_t0 = time.time()
         self._hold_t0 = self._test_t0
-        self.worker.write_req("axis0.controller.input_vel", self.amp.value())
+        self.worker.write_req("axis%d.controller.input_vel" % self.axis,
+                              self.amp.value())
         self.btn_test.setEnabled(False)
 
     def _on_tick(self):
         if self._test_t0 is None:
             return
         if time.time() - self._test_t0 >= self.dur.value():
-            self.worker.write_req("axis0.controller.input_vel", 0.0)
+            self.worker.write_req("axis%d.controller.input_vel" % self.axis, 0.0)
             self._test_t0 = None
             self.btn_test.setEnabled(True)
 

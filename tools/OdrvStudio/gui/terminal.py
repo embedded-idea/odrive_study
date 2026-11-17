@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QLineEdit, QPlainTextEdit, QPushButton, QHBoxLayout, QVBoxLayout, QWidget,
 )
 
-from OdrvTool.device import (
+from ..device import (
     AXIS_ERR, CTRL_ERR, ENC_ERR, MOTOR_ERR, ODRV_ERR, decode_error,
 )
 
@@ -24,17 +24,19 @@ ERR_TABLES = {
 
 HELP = """可用命令:
   help                        显示本帮助
-  status                      摘要状态
+  status                      摘要状态(全部轴)
   errors                      各级错误码(已翻译)
   clear                       清除全部错误
-  start | stop                进入闭环 / 回 IDLE
-  cal motor | cal encoder     电机标定 / 编码器标定
+  start | stop                当前选中轴 进入闭环 / 回 IDLE
+  estop                       全部轴急停
+  cal motor | cal encoder     电机标定 / 编码器标定(当前轴)
   save                        保存配置并重启
   reboot                      重启
   get <path> [path…]          读属性,如 get axis0.controller.config.vel_gain
-  set <path> <value>          写属性,如 set axis0.controller.input_vel 0.5
+  set <path> <value>          写属性,如 set axis1.controller.input_vel 0.5
   <path>                      等价于 get <path>
   <path> = <value>            等价于 set <path> <value>
+提示: axis1 的路径在双轴板卡上可用(如 axis1.encoder.pos_estimate)。
 """
 
 

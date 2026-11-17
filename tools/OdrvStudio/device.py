@@ -1,6 +1,7 @@
-"""OdrvTool - ODrive 设备访问层"""
+"""OdrvStudio - 设备常量与错误码翻译。
 
-import odrive
+(原 tools/OdrvTool/device.py 的公共部分,统一进 OdrvStudio)
+"""
 
 AXIS_STATE = {
     0: "UNDEFINED", 1: "IDLE", 2: "STARTUP_SEQUENCE",
@@ -62,79 +63,5 @@ def decode_error(mask, table):
     return "0x%x (unknown)" % mask
 
 
-class Device:
-    def __init__(self, timeout=6):
-        self.dev = None
-        self.error = ""
-        self.connect(timeout)
-
-    def connect(self, timeout=6):
-        try:
-            self.dev = odrive.find_sync(timeout=timeout)
-            self.error = ""
-            return True
-        except AssertionError:
-            self.dev = None
-            self.error = "设备被其它程序占用（关掉 Web GUI / odrivetool / 其它脚本）"
-            return False
-        except Exception as e:
-            self.dev = None
-            self.error = "%s: %s" % (type(e).__name__, e)
-            return False
-
-    def rd(self, path):
-        o = self.dev
-        for a in path.split("."):
-            o = getattr(o, a)
-        return o
-
-    def wr(self, path, value):
-        o = self.dev
-        parts = path.split(".")
-        for a in parts[:-1]:
-            o = getattr(o, a)
-        setattr(o, parts[-1], value)
-
-    def state_name(self):
-        try:
-            s = self.rd("axis0.current_state")
-            return AXIS_STATE.get(s, str(s))
-        except Exception:
-            return "?"
-
-    def status(self):
-        out = {}
-        for key, path in [
-            ("vbus", "vbus_voltage"), ("ibus", "ibus"),
-            ("state", "axis0.current_state"),
-            ("vel", "axis0.encoder.vel_estimate"),
-            ("vel_set", "axis0.controller.vel_setpoint"),
-            ("pos", "axis0.encoder.pos_estimate"),
-            ("iq", "axis0.motor.current_control.Iq_measured"),
-            ("odrv_err", "error"),
-            ("axis_err", "axis0.error"),
-            ("motor_err", "axis0.motor.error"),
-            ("enc_err", "axis0.encoder.error"),
-            ("ctrl_err", "axis0.controller.error"),
-            ("pre_cal", "axis0.encoder.config.pre_calibrated"),
-            ("sensorless", "axis0.config.enable_sensorless_mode"),
-        ]:
-            try:
-                out[key] = self.rd(path)
-            except Exception:
-                out[key] = None
-        return out
-
-    def errors_ok(self):
-        s = self.status()
-        return all(not s.get(k) for k in ("odrv_err", "axis_err", "motor_err", "enc_err", "ctrl_err"))
-
-    def ensure_closed_loop(self, mode=2):
-        if self.rd("axis0.current_state") != 8:
-            try:
-                self.wr("axis0.controller.input_vel", 0.0)
-            except Exception:
-                pass
-            self.wr("axis0.controller.config.control_mode", mode)
-            self.wr("axis0.controller.config.input_mode", 1)
-            self.wr("axis0.requested_state", 8)
+def state_name(num):
+    return AXIS_STATE.get(num, str(num))

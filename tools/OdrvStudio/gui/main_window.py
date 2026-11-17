@@ -1,22 +1,22 @@
 """OdrvStudio - 主窗口(参考 SimpleFOCStudio 的 mainWindow + toolbar)。"""
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import (
-    QLabel, QMainWindow, QSpinBox, QToolBar, QWidget, QAction,
+    QLabel, QMainWindow, QSpinBox, QToolBar, QAction,
 )
 
-from OdrvTool.device import (
+from ..device import (
     AXIS_ERR, CTRL_ERR, ENC_ERR, MOTOR_ERR, ODRV_ERR, decode_error,
 )
 
 from .work_area import WorkArea
 
-ERR_TABLES = [
+ERR_PATH_TABLES = [
     ("ODRIVE", "error", ODRV_ERR),
-    ("AXIS", "axis0.error", AXIS_ERR),
-    ("MOTOR", "axis0.motor.error", MOTOR_ERR),
-    ("ENC", "axis0.encoder.error", ENC_ERR),
-    ("CTRL", "axis0.controller.error", CTRL_ERR),
+    ("AXIS", "axis{a}.error", AXIS_ERR),
+    ("MOTOR", "axis{a}.motor.error", MOTOR_ERR),
+    ("ENC", "axis{a}.encoder.error", ENC_ERR),
+    ("CTRL", "axis{a}.controller.error", CTRL_ERR),
 ]
 
 
@@ -115,7 +115,9 @@ class MainWindow(QMainWindow):
             self.act_connect.setText("断开")
             self.act_connect.setEnabled(True)
             self.lab_conn.setStyleSheet("color:#4caf50; font-weight:bold;")
-            self.lab_conn.setText("已连接")
+            self.lab_conn.setText("已连接(%s)" %
+                                  " ".join("ax%d" % a for a in ev[1]))
+            self.work.set_axes(ev[1])
             self.work.set_connected(True)
         elif kind == "connecting":
             self.lab_conn.setStyleSheet("color:#ffb74d;")
@@ -133,6 +135,7 @@ class MainWindow(QMainWindow):
             self.lab_conn.setStyleSheet("color:#ef5350;")
             self.lab_conn.setText("未连接(%s)" % ev[1])
             self.lab_fw.setText("")
+            self.work.set_axes(self.worker.axes)
             self.work.set_connected(False)
 
     def _refresh_status(self):
@@ -143,10 +146,16 @@ class MainWindow(QMainWindow):
         if snap.get("fw_version_major") is not None:
             self.lab_fw.setText("固件 v%s" % fw)
         errs = []
-        for name, path, table in ERR_TABLES:
-            v = snap.get(path)
-            if isinstance(v, int) and v:
-                errs.append("%s:%s" % (name, decode_error(v, table)))
+        for name, tpl, table in ERR_PATH_TABLES:
+            if "{a}" in tpl:
+                for a in self.worker.axes:
+                    v = snap.get(tpl.format(a=a))
+                    if isinstance(v, int) and v:
+                        errs.append("a%d %s:%s" % (a, name, decode_error(v, table)))
+            else:
+                v = snap.get(tpl)
+                if isinstance(v, int) and v:
+                    errs.append("%s:%s" % (name, decode_error(v, table)))
         if errs:
             self.lab_err.setStyleSheet("color:#ef5350;")
             self.lab_err.setText("  ".join(errs))
