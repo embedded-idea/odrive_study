@@ -29,7 +29,8 @@ public:
         float current_lim_margin = 8.0f;    // Maximum violation of current_lim
         float torque_lim = std::numeric_limits<float>::infinity();           //[Nm]. 
         // Value used to compute shunt amplifier gains
-        float requested_current_range = 60.0f; // [A]
+        // 固定增益 20 倍时：1mΩ 采样电阻对应 60A，0.5mΩ 对应 120A（移植手册第 5 节）
+        float requested_current_range = 120.0f; // [A]
         float current_control_bandwidth = 1000.0f;  // [rad/s]
         float inverter_temp_limit_lower = 100;
         float inverter_temp_limit_upper = 120;
