@@ -50,6 +50,22 @@ fc-cache -f && fc-match "Microsoft YaHei"   # 应输出 msyh.ttc
 主题会按可用性自动挑选 `Microsoft YaHei` / `Noto Sans CJK SC` / `SimHei`
 等字体(见 `gui/theme.py` 的 `ui_font()`),终端和代码预览用 `mono_font()`。
 
+## Windows 单文件 exe 打包
+
+```powershell
+cd tools\OdrvStudio
+py -3.13 -m venv .venv
+.venv\Scripts\pip install -r requirements-build.txt
+.venv\Scripts\pyinstaller OdrvStudio.spec --noconfirm
+# 产物: dist\OdrvStudio.exe (约 64 MB,双击即用,无需 Python 环境)
+```
+
+- `odrive-interface.yaml` 与 libodrive 原生库已打进 exe(`spec.py` 支持
+  `_MEIPASS` 回退);exe 旁放同名 yaml 可覆盖内置参数表。
+- 构建环境与 WSL 运行环境不同:PySide6 6.6.3.1 不支持 Python 3.13,
+  且 PyPI odrive 0.5.4 缺少 `find_sync()`,故用 `requirements-build.txt`
+  的已验证版本(odrive 0.6.11.post1 / PySide6 6.11.3 / pyqtgraph 0.14.0)。
+
 ## 界面布局(照搬 SimpleFOCStudio-zh formview)
 
 ```

@@ -1,0 +1,15 @@
+# OdrvStudio Windows 单文件 exe 构建环境 (Python 3.13)
+# 与 requirements.txt(WSL 运行环境)分开:PySide6 6.6.3.1 不支持 Python 3.13,
+# 且 PyPI 的 odrive 0.5.4 没有代码所需的 find_sync(),故构建用以下已验证版本:
+#
+#   py -3.13 -m venv .venv
+#   .venv\Scripts\pip install -r requirements-build.txt
+#   .venv\Scripts\pyinstaller OdrvStudio.spec --noconfirm
+#
+# 产物: dist/OdrvStudio.exe (冒烟测试 test_smoke.py 全部通过)
+
+odrive==0.6.11.post1
+PySide6==6.11.3
+pyqtgraph==0.14.0
+PyYAML==6.0.3
+pyinstaller==6.22.3
