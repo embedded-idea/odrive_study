@@ -1,135 +1,148 @@
-ODrive Motor Control in Practice
+# ODrive 电机控制实战 · odrive_study
 
-This repository contains the supporting materials for the book:
+本仓库是《ODrive 电机控制实战》（作者：张闽，电子工业出版社出版）的**配套资源仓库**，同时也是一个**基于 ODrive v0.5.6 开源固件整理精简的学习版固件工程**（编译目标 `odrive_min`），面向 ODrive v3.6 硬件（主控 STM32F405 @ 168 MHz，双轴 BLDC FOC 控制器）。
 
-ODrive 电机控制实战
+你可以把它当作两种东西来用：
 
-本仓库是《ODrive 电机控制实战》一书的配套资源仓库。
+- **跟着书学**：按书籍章节动手实践，配套代码、3D 打印模型和演示视频都在本仓库中；
+- **读源码学**：对照源码深入理解 FOC 磁场定向控制、STM32 外设（ADC / TIM / SPI / CAN）、FreeRTOS 任务调度和电机固件工程组织。
 
-![ODrive 电机控制实战封面](3dprintmodel_demo_fromOdrivebook/pictures/IMG_4453.JPG)
-![ODrive 电机控制实战封面](3dprintmodel_demo_fromOdrivebook/pictures/IMG_4444.JPG)
-![ODrive 电机控制实战封面](3dprintmodel_demo_fromOdrivebook/pictures/IMG_4451.JPG)
-![ODrive 电机控制实战封面](3dprintmodel_demo_fromOdrivebook/pictures/IMG_4449.JPG)
+<p align="center">
+  <img src="3dprintmodel_demo_fromOdrivebook/pictures/IMG_4453.JPG" alt="书中最终项目实物" width="32%">
+  <img src="3dprintmodel_demo_fromOdrivebook/pictures/IMG_4444.JPG" alt="书中最终项目实物" width="32%">
+  <img src="3dprintmodel_demo_fromOdrivebook/pictures/IMG_4451.JPG" alt="书中最终项目实物" width="32%">
+</p>
 
-little car final project here 最后的小项目视频
-[观看演示视频](3dprintmodel_demo_fromOdrivebook/videos/IMG_4448.mov)
+## 目录结构
 
-[click here to buy the book 点击购买《ODrive 电机控制实战》](https://mall.bilibili.com/neul-next/detailuniversal/detail.html?isMerchant=1&page=detailuniversal_detail&saleType=0&itemsId=40330749&loadingShow=1&noTitleBar=1&track_id=__BGMT__&from=&from_spmid=__SPMID__&msource=cps_comments_3546707220498944_cont-1-116022233268364)
+| 目录 | 说明 |
+| --- | --- |
+| `MotorControl/` | 核心控制逻辑：轴状态机（axis）、电机（motor）、编码器（encoder）、控制器（controller）、FOC、无感估计、梯形轨迹规划等，固件入口在 `main.cpp` |
+| `Board/v3/` | ODrive v3 板级支持代码：CubeMX 生成的外设初始化（`Src/`、`Odrive.ioc`）、时钟与 GPIO 配置、链接脚本 |
+| `Drivers/` | 栅极驱动芯片驱动：`DRV8301`（原版支持）、`EG2134`（本仓库新增支持） |
+| `communication/` | 通信协议：ASCII 协议、USB CDC、UART、CAN、I2C |
+| `fibre-cpp/` + `autogen/` | ODrive 的 Fibre RPC 框架，接口代码由 `odrive-interface.yaml` 自动生成 |
+| `ThirdParty/` | 第三方库：FreeRTOS、STM32F4 HAL、CMSIS、USB 设备库 |
+| `Display/` | 书中 RC 小车项目使用的 OLED 显示驱动 |
+| `tools/` | odrivetool、Fibre 接口代码生成器、OdrvStudio 桌面调试 GUI、环境配置脚本 |
+| `Doc/` | 学习笔记与使用指南（见下文"学习文档"） |
+| `3dprintmodel_demo_fromOdrivebook/` | 书中最终项目（3D 打印小车）的模型文件、照片与演示视频 |
 
+## 硬件准备
 
-[教学视频 teaching videos](https://www.bilibili.com/video/BV1M9QtYwEVo?spm_id_from=333.788.videopod.sections&vd_source=f3cac93aa19596ae6543cfeb95b829d7)
+- ODrive v3.6 控制板（含 56V 版本）
+- 云台电机（书中使用 2804 无刷电机）
+- 编码器（书中使用 AS5047P 磁编码器）
+- 直流电源、ST-Link V2 调试器、Micro USB 数据线
 
+## 快速开始
 
-[书籍介绍视频 book videos](https://www.bilibili.com/video/BV1UKFkzEE4T/?spm_id_from=333.1387.0.0&vd_source=f3cac93aa19596ae6543cfeb95b829d7)
+### 1. 环境搭建
 
-The book has been officially published in China by Publishing House of Electronics Industry.
+一键安装编译工具链（arm-none-eabi-gcc、make、openocd、gdb-multiarch），并创建 `~/.odrive-venv` 虚拟环境安装 odrivetool：
 
-If you find this book or this repository helpful, please consider supporting the official published version. 
-Your support helps me continue improving the materials and creating more practical content about motor control, 
-robotics, embedded systems, and low-level engineering.
+```bash
+bash tools/setup_env.sh            # 基础配置
+bash tools/setup_env.sh --with-udev  # 同时安装 ODrive USB 权限规则（需要 sudo）
+```
 
-本书已由 电子工业出版社 在中国正式出版。如果这本书或本仓库中的内容对你有帮助，欢迎支持正版购买。
-你的支持也是我继续更新资料、完善示例代码、制作更多电机控制与机器人相关内容的动力。
+### 2. 编译固件
 
+```bash
+make -j$(nproc)
+# 产物：build/odrive_min.elf / .hex / .bin
+```
 
-Book Official purchase links:
-https://mall.bilibili.com/neul-next/detailuniversal/detail.html?isMerchant=1&page=detailuniversal_detail&saleType=0&itemsId=40330749&loadingShow=1&noTitleBar=1&track_id=__BGMT__&from=&from_spmid=__SPMID__&msource=cps_comments_3546707220498944_cont-1-116022233268364
+### 3. 烧录与调试
 
-图书正版购买链接：
-👉 请在这里放购买链接 
-https://mall.bilibili.com/neul-next/detailuniversal/detail.html?isMerchant=1&page=detailuniversal_detail&saleType=0&itemsId=40330749&loadingShow=1&noTitleBar=1&track_id=__BGMT__&from=&from_spmid=__SPMID__&msource=cps_comments_3546707220498944_cont-1-116022233268364
+通过 OpenOCD + ST-Link V2 烧录：
 
+```bash
+# 解锁芯片（首次烧录被读保护的板子需要）
+openocd -s /usr/share/openocd/scripts -f interface/stlink.cfg -f target/stm32f4x.cfg \
+    -c init -c 'reset halt' -c 'stm32f4x unlock 0'
 
-Repository Contents may include:
-Source code
-Example projects and 3d print parts
-ODrive configuration files
-Motor control experiments
-Hardware connection notes
-Debugging notes
-Errata and updates
-Additional resources not included in the printed book
+# 烧录
+openocd -s /usr/share/openocd/scripts -f interface/stlink.cfg -f target/stm32f4x.cfg \
+    -c init -c 'reset halt' \
+    -c 'flash write_image erase build/odrive_min.elf' -c 'reset run' -c exit
+```
 
-本仓库包含的资源，你可以在本仓库中找到本书相关的配套资料，包括但不限于：
-示例代码
-最终实验项目以及3d打印文件
-ODrive 配置说明
-电机控制相关资料
-调试记录
-硬件连接参考
-后续补充内容与勘误
-如果你是按照书中的章节一步步学习，建议结合本仓库中的代码和说明一起实践。
+调试推荐 VSCode + OpenOCD + Cortex-Debug，配合 `gdb-multiarch` 进行断点调试（详见 `Doc/readme_please.txt`）。
 
+### 4. 使用 odrivetool
 
-Who This Book Is For
-Engineers and students interested in ODrive motor control
-Robotics enthusiasts and makers
-Readers who want to understand BLDC motors, FOC, encoders, and motor drivers
-Developers working on robots, mobile platforms, gimbals, or motion-control systems
-Anyone who wants to learn motor control through hands-on practice
+```bash
+~/.odrive-venv/bin/odrivetool
+```
 
-本书和本仓库适合以下读者：
-想学习 ODrive 电机控制的工程师、学生和创客
-想了解无刷电机、FOC、电机驱动和机器人底层控制的人
-正在做机器人、小车、机械臂、云台或移动平台项目的人
-希望从实际项目中理解电机控制的人
+连上后设备对象为 `dev0`，常用指令示例：
 
-About the Book,This book focuses on practical ODrive motor control.
-Instead of only explaining theory, the goal is to help readers build a real motor-control system step by step: wiring the hardware, 
-configuring ODrive, tuning parameters, understanding feedback, and finally controlling the motor in real applications.
-关于本书
-《ODrive 电机控制实战》不是一本只讲理论公式的书，而是希望从实际工程出发，帮助读者真正把电机转起来、调起来、用起来。
-本书围绕 ODrive 控制器展开，结合电机、编码器、电源、上位机配置、参数调试和实际控制过程，帮助读者建立对电机控制系统的整体理解。
+```python
+dev0.axis0.requested_state = AXIS_STATE_MOTOR_CALIBRATION    # 电机校准
+dev0.axis0.requested_state = AXIS_STATE_ENCODER_OFFSET_CALIBRATION  # 编码器偏置校准
+dev0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL  # 进入闭环控制
+dev0.axis0.controller.input_pos = 5                          # 位置指令（圈数）
+```
 
+完整命令清单、校准流程与错误码排查见 `Doc/odrive_commands_usage_guide.md`。
 
-Issues and Feedback
-If you find any mistakes in the book or the repository, feel free to open an Issue or submit a Pull Request.
-When reporting an issue, please include:
-ODrive hardware version:
-Firmware version:
-Operating system:
-Motor model:
-Encoder model:
-Error message:
-Steps to reproduce:
+## OdrvStudio 桌面调试工具
 
-资源说明,由于硬件版本、固件版本、操作系统环境和 ODrive 工具链可能会不断变化，本仓库中的内容可能会持续更新。
-如果你在使用过程中发现问题，欢迎通过 GitHub Issues 提交反馈。
-勘误与反馈
-如果你发现书中或代码中存在错误，欢迎提交 Issue 或 Pull Request。
-提交问题时，建议包含以下信息：
-1. 使用的 ODrive 硬件版本
-2. 使用的固件版本
+本仓库附带一个参考 SimpleFOCStudio 开发的 ODrive 桌面调试工作台（PySide6 + PyQtGraph），针对 ODrive v3.6 + 2804 云台电机 + AS5047P 适配，支持双轴监控、参数配置与曲线绘图：
+
+```bash
+./tools/odrvstudio.sh                # Linux / WSL
+tools\run_odrvstudio.bat             # Windows，双击运行
+```
+
+详见 `tools/OdrvStudio/README.md`。
+
+## 书中最终项目：3D 打印小车
+
+书中最后完成了一个 3D 打印底盘的 ODrive 小车项目，模型文件、实物照片和演示视频都在 `3dprintmodel_demo_fromOdrivebook/` 目录中：
+
+- [观看演示视频](3dprintmodel_demo_fromOdrivebook/videos/IMG_4448.mov)
+
+## 学习文档
+
+| 文档 | 内容 |
+| --- | --- |
+| `Doc/Odrive.md` | 仓库总览与固件完整运行流程梳理（从上电到闭环控制，含代码位置对照） |
+| `Doc/odrive_commands_usage_guide.md` | odrivetool 命令怎么用：在哪儿敲、每一步看什么、出错怎么查 |
+| `Doc/odrive_2804_as5047p_commands.md` | 2804 + AS5047P 的完整命令清单、参数表与错误码 |
+| `Doc/ODrive移植说明v0.5.6.pdf` | ODrive v0.5.6 移植说明 |
+| `Doc/readme_please.txt` | 编译烧录调试备忘 |
+
+## 配套视频与图书
+
+- [教学视频（B站）](https://www.bilibili.com/video/BV1M9QtYwEVo?spm_id_from=333.788.videopod.sections&vd_source=f3cac93aa19596ae6543cfeb95b829d7)
+- [书籍介绍视频（B站）](https://www.bilibili.com/video/BV1UKFkzEE4T/?spm_id_from=333.1387.0.0&vd_source=f3cac93aa19596ae6543cfeb95b829d7)
+- [购买正版图书《ODrive 电机控制实战》](https://mall.bilibili.com/neul-next/detailuniversal/detail.html?isMerchant=1&page=detailuniversal_detail&saleType=0&itemsId=40330749&loadingShow=1&noTitleBar=1&track_id=__BGMT__&from=&from_spmid=__SPMID__&msource=cps_comments_3546707220498944_cont-1-116022233268364)
+
+本书已由电子工业出版社正式出版。如果这本书或本仓库对你有帮助，欢迎支持正版购买——你的支持是我继续更新资料、完善示例代码、制作更多电机控制与机器人内容的动力。
+
+## 勘误与反馈
+
+由于硬件版本、固件版本和工具链可能持续变化，本仓库内容也会不定期更新。如果你发现书中或代码中的错误，欢迎提交 Issue 或 Pull Request。提交问题时建议包含：
+
+1. ODrive 硬件版本
+2. 固件版本
 3. 操作系统环境
-4. 电机和编码器型号
+4. 电机与编码器型号
 5. 具体错误信息或现象
-6. 你已经尝试过的解决方法
+6. 已尝试过的解决方法
 
 这样可以更快定位问题。
 
+## 作者
 
-Support the Official Book
-The book has been officially published by Publishing House of Electronics Industry in China.
-If this project helps you, please support the official version.
+**张闽（Min Zhang）** —— 长期关注电机控制、嵌入式系统、机器人、操作系统和底层软件技术，持续分享相关学习资料与项目实践。
 
-Thank you!
+- B站：https://space.bilibili.com/3546707220498944
+- Udemy：https://www.udemy.com/course/build-an-300-lines-operating-system-from-scratch-x86-base/
+- GitHub：https://github.com/embedded-idea
 
-支持正版
-本书已经由 电子工业出版社 正式出版。
-如果你希望系统学习 ODrive、电机控制、FOC 和机器人底层控制，欢迎购买正版图书。
+## 许可说明
 
-正版购买链接：
-👉 https://mall.bilibili.com/neul-next/detailuniversal/detail.html?isMerchant=1&page=detailuniversal_detail&saleType=0&itemsId=40330749&loadingShow=1&noTitleBar=1&track_id=__BGMT__&from=&from_spmid=__SPMID__&msource=cps_comments_3546707220498944_cont-1-114170229950178
-感谢你的支持！
-
-
-Author
-Min Zhang / 张闽
-I write and build projects about motor control, robotics, embedded systems, operating systems, and low-level software engineering.
-作者：张闽
-我长期关注电机控制、嵌入式系统、机器人、操作系统和底层软件技术，也会持续分享相关学习资料和项目实践。
-欢迎关注我的其他内容：
-个人主页：
-B站：https://space.bilibili.com/3546707220498944?spm_id_from=333.788.0.0
-Udemy：https://www.udemy.com/course/build-an-300-lines-operating-system-from-scratch-x86-base/?srsltid=AfmBOoqO5J6iv48X69rzoXLj_p0Y6hdH9ts34JwrYguhg-4mV1PZRxmn#instructor-1
-GitHub：https://github.com/embedded-idea
+固件部分基于 [ODrive](https://github.com/odriverobotics/ODrive) v0.5.6 开源固件（MIT License）修改，仅用于学习交流；书籍内容版权归作者与电子工业出版社所有。
