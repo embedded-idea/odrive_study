@@ -11,12 +11,12 @@ from PySide6.QtWidgets import (
     QToolBar, QToolButton,
 )
 
-from .bode_tab import BodeTab
-from .config_panel import ConfigPanel
-from .param_tree import ParamTree
-from .terminal import Terminal
+from .panels.bode_tab import BodeTab
+from .panels.config_panel import ConfigPanel
+from .panels.param_tree import ParamTree
+from .panels.terminal import Terminal
 from .work_area import WorkArea
-from ..device import (
+from ..core.device import (
     AXIS_ERR, CTRL_ERR, ENC_ERR, MOTOR_ERR, ODRV_ERR, decode_error,
 )
 from .. import __version__

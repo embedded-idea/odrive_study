@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QLabel, QPushButton,
 )
 
-from .theme import tag
+from ..theme import tag
 
 # (显示名, control_mode 值, 该模式下可设置的输入)
 MODES = [

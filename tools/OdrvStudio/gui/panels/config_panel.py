@@ -16,9 +16,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..device import friendly_error
-from ..spec import build_index, writable_leaves
-from .theme import mono_font
+from ...core.device import friendly_error
+from ...core.spec import build_index, writable_leaves
+from ..theme import mono_font
 
 BATCH = 40
 

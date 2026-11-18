@@ -164,21 +164,47 @@ clamp,也不再按 `vel_limit` / `current_lim` 自动改范围;大幅绝对位�
 ## 代码结构(对照 SimpleFOCStudio)
 
 ```
+OdrvStudio/
+├── __init__.py / __main__.py   包入口(python -m OdrvStudio)
+├── core/                       非 GUI 层
+│   ├── device.py               错误码/状态名/历史字段等设备常量与工具函数
+│   ├── spec.py                 解析 odrive-interface.yaml → 属性树索引
+│   └── worker.py               后台线程:轮询/命令/事件(双轴)
+├── gui/                        窗口壳与公共控件
+│   ├── main_window.py          顶部工具栏 + 多标签管理
+│   ├── work_area.py            设备页三段式布局 + 连接控制/通用设置
+│   ├── theme.py                Material 浅色主题/字体/标签样式
+│   └── panels/                 可复用功能面板
+│       ├── monitor.py          曲线监控 + DRO
+│       ├── control_panel.py    控制环/通用设置/点动
+│       ├── pid_panel.py        PID 调参 + 阶跃测试
+│       ├── motor_id_panel.py   电机参数识别
+│       ├── config_panel.py     代码生成 + 配置快照
+│       ├── param_tree.py       全参数树形视图
+│       ├── terminal.py         命令行交互
+│       └── bode_tab.py         速度扫频 Bode 图
+├── tests/test_smoke.py         离屏冒烟测试(假设备,无需硬件)
+└── assets/                     图标与预览图
+```
+
+与 SimpleFOCStudio 源文件的对应关系:
+
+```
 simpleFOCStudio.py             →  tools/odrvstudio.sh(启动器)+ OdrvStudio/__main__.py
-src/simpleFOCConnector.py      →  OdrvStudio/device_worker.py(后台线程:轮询/命令/事件,双轴)
-(device.json)                  →  OdrvStudio/spec.py(解析 odrive-interface.yaml)
+src/simpleFOCConnector.py      →  OdrvStudio/core/worker.py(后台线程:轮询/命令/事件,双轴)
+(device.json)                  →  OdrvStudio/core/spec.py(解析 odrive-interface.yaml)
 src/gui/mainWindow.py          →  OdrvStudio/gui/main_window.py(顶部工具栏 + 多标签)
 src/gui/toolbar.py             →  main_window._build_toolbar(添加设备▾/打开/保存/生成代码/命令行)
 src/gui/workAreaTabbedWidget   →  main_window 标签管理(可关闭/可拖动,addDeviceTree/addDeviceForm…)
 src/gui/configtool/deviceConfigurationTool → gui/work_area.py(设备页三段式布局 + 连接控制/通用设置)
-src/gui/configtool/graphicWidget + droDisplayWidget → gui/monitor.py
-src/gui/configtool/controlLoopConfig + torqueConfig → gui/control_panel.py(ControlLoopBox/TorqueBox)
-src/gui/configtool/generalControls                  → gui/control_panel.py(GeneralControlsBox)
-src/gui/configtool/deviceJoggingControl             → gui/control_panel.py(JogControlBox)
-src/gui/configtool/pidConfiguration                 → gui/pid_panel.py
-src/gui/configtool/treeViewConfigTool               → gui/param_tree.py
-src/gui/configtool/generatedCodeDisplay             → gui/config_panel.py(代码生成 + 快照)
-src/gui/sharedcomnponets/commandLineInterface       → gui/terminal.py
+src/gui/configtool/graphicWidget + droDisplayWidget → gui/panels/monitor.py
+src/gui/configtool/controlLoopConfig + torqueConfig → gui/panels/control_panel.py(ControlLoopBox/TorqueBox)
+src/gui/configtool/generalControls                  → gui/panels/control_panel.py(GeneralControlsBox)
+src/gui/configtool/deviceJoggingControl             → gui/panels/control_panel.py(JogControlBox)
+src/gui/configtool/pidConfiguration                 → gui/panels/pid_panel.py
+src/gui/configtool/treeViewConfigTool               → gui/panels/param_tree.py
+src/gui/configtool/generatedCodeDisplay             → gui/panels/config_panel.py(代码生成 + 快照)
+src/gui/sharedcomnponets/commandLineInterface       → gui/panels/terminal.py
 ```
 
 与 SimpleFOCStudio 的主要差异:SimpleFOC 走串行口 + 文本协议,这里走 ODrive 的

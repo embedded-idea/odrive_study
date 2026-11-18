@@ -13,8 +13,8 @@ from PySide6.QtWidgets import (
     QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QLabel, QPushButton,
 )
 
-from ..device import AXIS_ERR, MOTOR_ERR, decode_error, state_name
-from .theme import tag
+from ...core.device import AXIS_ERR, MOTOR_ERR, decode_error, state_name
+from ..theme import tag
 
 MOTOR_TYPES = (("高电流 (0)", 0), ("云台 (2)", 2), ("交流感应 (3)", 3))
 
