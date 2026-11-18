@@ -138,6 +138,7 @@ python3 tools/gen_can_dbc.py --node-id 3 --extended   # 29 位扩展帧
 | `Doc/ODrive移植说明v0.5.6.pdf`        | ODrive v0.5.6 移植说明                                             |
 | `Doc/readme_please.txt`               | 编译烧录调试备忘                                                   |
 | `Doc/栅极驱动器移植说明.md`           | EG2134 / DRV8301 编译期切换机制、硬件差异与新增驱动芯片步骤        |
+| `Doc/固件版本号生成说明.md`           | 版本号从 git tag 到固件/上位机的完整生成链路、各层读取方式与踩坑   |
 | `Doc/odrive_can.dbc`                  | CAN 协议 DBC 文件（由 `tools/gen_can_dbc.py` 生成，见下文）        |
 
 ## 配套视频与图书
