@@ -10,11 +10,11 @@ from PySide6.QtWidgets import (
     QLineEdit, QPlainTextEdit, QPushButton, QHBoxLayout, QVBoxLayout, QWidget,
 )
 
-from ..device import (
+from ...core.device import (
     AXIS_ERR, CTRL_ERR, ENC_ERR, MOTOR_ERR, ODRV_ERR, decode_error,
     friendly_error,
 )
-from .theme import mono_font, tag
+from ..theme import mono_font, tag
 
 ERR_TABLES = {
     "error": ODRV_ERR,

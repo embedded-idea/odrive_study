@@ -13,14 +13,14 @@ import tempfile
 import time
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
 import odrive  # noqa: E402
 from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtWidgets import QApplication, QFileDialog  # noqa: E402
 
-from OdrvStudio.spec import build_index, load_spec  # noqa: E402
-from OdrvStudio.device_worker import DeviceWorker  # noqa: E402
+from OdrvStudio.core.spec import build_index, load_spec  # noqa: E402
+from OdrvStudio.core.worker import DeviceWorker  # noqa: E402
 from OdrvStudio.gui.main_window import MainWindow  # noqa: E402
 
 roots = load_spec()
@@ -172,7 +172,7 @@ def stage3():
     win.work.terminal._exec("get axis1.encoder.pos_estimate")
     win.console._exec("get axis0.vbus_voltage")
     # 危险写入识别
-    from OdrvStudio.gui.param_tree import ParamTree
+    from OdrvStudio.gui.panels.param_tree import ParamTree
     check(ParamTree.is_dangerous("axis0.controller.config.vel_gain") and
           ParamTree.is_dangerous("axis0.motor.config.calibration_current") and
           not ParamTree.is_dangerous("axis0.encoder.pos_estimate"),

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from ..spec import decode_bits
+from ...core.spec import decode_bits
 
 COL_NAME, COL_TYPE, COL_UNIT, COL_VALUE = 0, 1, 2, 3
 ROLE_NODE = Qt.UserRole

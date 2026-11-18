@@ -15,8 +15,8 @@ _TOOLS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _TOOLS not in sys.path:
     sys.path.insert(0, _TOOLS)
 
-from OdrvStudio.device_worker import DeviceWorker   # noqa: E402
-from OdrvStudio.spec import load_spec               # noqa: E402
+from OdrvStudio.core.worker import DeviceWorker   # noqa: E402
+from OdrvStudio.core.spec import load_spec               # noqa: E402
 
 
 def create_app(argv):

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
-from ..device import EXTRA_FIELDS, HIST_PATHS
+from ...core.device import EXTRA_FIELDS, HIST_PATHS
 
 pg.setConfigOptions(antialias=False, background="#000000", foreground="#c8ccd4")
 
@@ -405,7 +405,7 @@ class DROWidget(QWidget):
             lcd.display(float(v) if isinstance(v, (int, float)) else 0.0)
 
         state = snap.get(pre + "current_state")
-        from ..device import AXIS_STATE
+        from ...core.device import AXIS_STATE
         state_name = AXIS_STATE.get(state, str(state)) if isinstance(state, int) else "--"
         self.lab_small.setText(
             "状态 %s | Vbus %s V | Ibus %s A"

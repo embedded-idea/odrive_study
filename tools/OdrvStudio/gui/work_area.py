@@ -13,11 +13,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget,
 )
 
-from .control_panel import ControlLoopBox, GeneralControlsBox, SetpointBox
-from .monitor import DROWidget, MonitorWidget
-from .motor_id_panel import MotorParamPanel
-from .pid_panel import PidPanel
-from .terminal import Terminal
+from .panels.control_panel import ControlLoopBox, GeneralControlsBox, SetpointBox
+from .panels.monitor import DROWidget, MonitorWidget
+from .panels.motor_id_panel import MotorParamPanel
+from .panels.pid_panel import PidPanel
+from .panels.terminal import Terminal
 from .theme import tag
 
 

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
-from .theme import tag
+from ..theme import tag
 
 LOOPS = {
     "速度环": [
